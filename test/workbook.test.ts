@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll } from 'vitest';
 import { Workbook } from '../src';
+import type { ColumnConfig } from '../src';
 import { unlink, mkdir } from 'fs/promises';
 import { existsSync } from 'fs';
 
@@ -346,6 +347,259 @@ describe('Workbook', () => {
       const style = loadedSheet.cell('A1').style;
       expect(style.bold).toBe(true);
       expect(style.italic).toBe(true);
+    });
+  });
+
+  describe('addSheetFromData', () => {
+    interface Person {
+      name: string;
+      age: number;
+      city: string;
+    }
+
+    const testData: Person[] = [
+      { name: 'Alice', age: 30, city: 'Paris' },
+      { name: 'Bob', age: 25, city: 'London' },
+      { name: 'Charlie', age: 35, city: 'Berlin' },
+    ];
+
+    it('creates a sheet from an array of objects', () => {
+      const wb = Workbook.create();
+      const sheet = wb.addSheetFromData({
+        name: 'People',
+        data: testData,
+      });
+
+      expect(sheet.name).toBe('People');
+      expect(wb.sheetNames).toContain('People');
+    });
+
+    it('writes headers from object keys', () => {
+      const wb = Workbook.create();
+      const sheet = wb.addSheetFromData({
+        name: 'People',
+        data: testData,
+      });
+
+      expect(sheet.cell('A1').value).toBe('name');
+      expect(sheet.cell('B1').value).toBe('age');
+      expect(sheet.cell('C1').value).toBe('city');
+    });
+
+    it('writes data values correctly', () => {
+      const wb = Workbook.create();
+      const sheet = wb.addSheetFromData({
+        name: 'People',
+        data: testData,
+      });
+
+      // First data row (row 2)
+      expect(sheet.cell('A2').value).toBe('Alice');
+      expect(sheet.cell('B2').value).toBe(30);
+      expect(sheet.cell('C2').value).toBe('Paris');
+
+      // Second data row (row 3)
+      expect(sheet.cell('A3').value).toBe('Bob');
+      expect(sheet.cell('B3').value).toBe(25);
+      expect(sheet.cell('C3').value).toBe('London');
+
+      // Third data row (row 4)
+      expect(sheet.cell('A4').value).toBe('Charlie');
+      expect(sheet.cell('B4').value).toBe(35);
+      expect(sheet.cell('C4').value).toBe('Berlin');
+    });
+
+    it('applies bold style to headers by default', () => {
+      const wb = Workbook.create();
+      const sheet = wb.addSheetFromData({
+        name: 'People',
+        data: testData,
+      });
+
+      expect(sheet.cell('A1').style.bold).toBe(true);
+      expect(sheet.cell('B1').style.bold).toBe(true);
+      expect(sheet.cell('C1').style.bold).toBe(true);
+    });
+
+    it('disables header style when headerStyle is false', () => {
+      const wb = Workbook.create();
+      const sheet = wb.addSheetFromData({
+        name: 'People',
+        data: testData,
+        headerStyle: false,
+      });
+
+      expect(sheet.cell('A1').style.bold).toBeUndefined();
+    });
+
+    it('uses custom column configuration', () => {
+      const wb = Workbook.create();
+      const columns: ColumnConfig<Person>[] = [
+        { key: 'name', header: 'Full Name' },
+        { key: 'age', header: 'Age (years)' },
+      ];
+
+      const sheet = wb.addSheetFromData({
+        name: 'People',
+        data: testData,
+        columns,
+      });
+
+      // Check custom headers
+      expect(sheet.cell('A1').value).toBe('Full Name');
+      expect(sheet.cell('B1').value).toBe('Age (years)');
+
+      // City column should not exist (not in columns config)
+      expect(sheet.cell('C1').value).toBeNull();
+
+      // Data should still be correct
+      expect(sheet.cell('A2').value).toBe('Alice');
+      expect(sheet.cell('B2').value).toBe(30);
+    });
+
+    it('applies column styles to data cells', () => {
+      const wb = Workbook.create();
+      const columns: ColumnConfig<Person>[] = [{ key: 'name' }, { key: 'age', style: { italic: true } }];
+
+      const sheet = wb.addSheetFromData({
+        name: 'People',
+        data: testData,
+        columns,
+      });
+
+      // Age column data cells should be italic
+      expect(sheet.cell('B2').style.italic).toBe(true);
+      expect(sheet.cell('B3').style.italic).toBe(true);
+      expect(sheet.cell('B4').style.italic).toBe(true);
+
+      // Name column should not have italic
+      expect(sheet.cell('A2').style.italic).toBeUndefined();
+    });
+
+    it('starts at custom cell position', () => {
+      const wb = Workbook.create();
+      const sheet = wb.addSheetFromData({
+        name: 'People',
+        data: testData,
+        startCell: 'C3',
+      });
+
+      // Headers at C3, D3, E3
+      expect(sheet.cell('C3').value).toBe('name');
+      expect(sheet.cell('D3').value).toBe('age');
+      expect(sheet.cell('E3').value).toBe('city');
+
+      // First data row at C4
+      expect(sheet.cell('C4').value).toBe('Alice');
+      expect(sheet.cell('D4').value).toBe(30);
+      expect(sheet.cell('E4').value).toBe('Paris');
+    });
+
+    it('handles empty data array', () => {
+      const wb = Workbook.create();
+      const sheet = wb.addSheetFromData({
+        name: 'Empty',
+        data: [] as Person[],
+      });
+
+      expect(sheet.name).toBe('Empty');
+      expect(sheet.cell('A1').value).toBeNull();
+    });
+
+    it('handles boolean values', () => {
+      interface Item {
+        name: string;
+        active: boolean;
+      }
+
+      const data: Item[] = [
+        { name: 'Item1', active: true },
+        { name: 'Item2', active: false },
+      ];
+
+      const wb = Workbook.create();
+      const sheet = wb.addSheetFromData({
+        name: 'Items',
+        data,
+      });
+
+      expect(sheet.cell('B2').value).toBe(true);
+      expect(sheet.cell('B3').value).toBe(false);
+    });
+
+    it('handles date values', () => {
+      interface Event {
+        name: string;
+        date: Date;
+      }
+
+      const eventDate = new Date('2024-06-15');
+      const data: Event[] = [{ name: 'Conference', date: eventDate }];
+
+      const wb = Workbook.create();
+      const sheet = wb.addSheetFromData({
+        name: 'Events',
+        data,
+      });
+
+      const result = sheet.cell('B2').value as Date;
+      expect(result instanceof Date).toBe(true);
+      expect(result.getFullYear()).toBe(2024);
+      expect(result.getMonth()).toBe(5); // June (0-based)
+      expect(result.getDate()).toBe(15);
+    });
+
+    it('handles null and undefined values', () => {
+      interface Item {
+        name: string;
+        value: string | null;
+      }
+
+      const data: Item[] = [
+        { name: 'Item1', value: null },
+        { name: 'Item2', value: 'hello' },
+      ];
+
+      const wb = Workbook.create();
+      const sheet = wb.addSheetFromData({
+        name: 'Items',
+        data,
+      });
+
+      expect(sheet.cell('B2').value).toBeNull();
+      expect(sheet.cell('B3').value).toBe('hello');
+    });
+
+    it('preserves data after save/load cycle', async () => {
+      const wb = Workbook.create();
+      wb.addSheetFromData({
+        name: 'People',
+        data: testData,
+      });
+
+      const buffer = await wb.toBuffer();
+      const loaded = await Workbook.fromBuffer(buffer);
+      const sheet = loaded.sheet('People');
+
+      // Check headers
+      expect(sheet.cell('A1').value).toBe('name');
+      expect(sheet.cell('B1').value).toBe('age');
+      expect(sheet.cell('C1').value).toBe('city');
+
+      // Check data
+      expect(sheet.cell('A2').value).toBe('Alice');
+      expect(sheet.cell('B2').value).toBe(30);
+      expect(sheet.cell('C2').value).toBe('Paris');
+    });
+
+    it('throws when sheet name already exists', () => {
+      const wb = Workbook.create();
+      expect(() =>
+        wb.addSheetFromData({
+          name: 'Sheet1',
+          data: testData,
+        }),
+      ).toThrow('Sheet already exists');
     });
   });
 });

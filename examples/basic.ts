@@ -1,7 +1,7 @@
 /**
  * Basic Example - Creating a simple spreadsheet
  *
- * Run with: npx tsx examples/basic.ts
+ * Run with: bun examples/basic.ts
  */
 import { Workbook } from '../src';
 

@@ -1,7 +1,7 @@
 /**
  * Pivot Table Example - Creating pivot tables from data
  *
- * Run with: npx tsx examples/pivot-table.ts
+ * Run with: bun examples/pivot-table.ts
  */
 import { Workbook } from '../src';
 
@@ -107,8 +107,6 @@ async function main() {
   // Save the workbook
   await wb.toFile('examples/output/pivot-table.xlsx');
   console.log('\nCreated: examples/output/pivot-table.xlsx');
-  console.log('\nOpen the file in Excel to see the pivot tables.');
-  console.log('Note: You may need to refresh the pivot tables in Excel (right-click > Refresh).');
 }
 
 main().catch(console.error);

@@ -66,6 +66,10 @@ export class Cell {
     }
     switch (t) {
       case 'n':
+        // Check if this is actually a date stored as number
+        if (this._isDateFormat()) {
+          return 'date';
+        }
         return 'number';
       case 's':
       case 'str':
@@ -78,7 +82,12 @@ export class Cell {
         return 'date';
       default:
         // If no type but has value, infer from value
-        if (typeof this._data.v === 'number') return 'number';
+        if (typeof this._data.v === 'number') {
+          if (this._isDateFormat()) {
+            return 'date';
+          }
+          return 'number';
+        }
         if (typeof this._data.v === 'string') return 'string';
         if (typeof this._data.v === 'boolean') return 'boolean';
         return 'empty';
@@ -97,8 +106,14 @@ export class Cell {
     }
 
     switch (t) {
-      case 'n':
-        return typeof v === 'number' ? v : parseFloat(String(v));
+      case 'n': {
+        const numVal = typeof v === 'number' ? v : parseFloat(String(v));
+        // Check if this is actually a date stored as number
+        if (this._isDateFormat()) {
+          return this._excelDateToJs(numVal);
+        }
+        return numVal;
+      }
       case 's':
         // Shared string reference
         if (typeof v === 'number') {
@@ -160,9 +175,13 @@ export class Cell {
       this._data.v = val ? 1 : 0;
       this._data.t = 'b';
     } else if (val instanceof Date) {
-      // Store as ISO date string with 'd' type
-      this._data.v = val.toISOString();
-      this._data.t = 'd';
+      // Store as Excel serial number with date format for maximum compatibility
+      this._data.v = this._jsDateToExcel(val);
+      this._data.t = 'n';
+      // Apply a default date format if no style is set
+      if (this._data.s === undefined) {
+        this._data.s = this._worksheet.workbook.styles.createStyle({ numberFormat: 'yyyy-mm-dd' });
+      }
     } else if ('error' in val) {
       this._data.v = val.error;
       this._data.t = 'e';
@@ -272,9 +291,25 @@ export class Cell {
    * Check if this cell has a date number format
    */
   private _isDateFormat(): boolean {
-    // TODO: Check actual number format from styles
-    // For now, return false - dates should be explicitly typed
-    return false;
+    if (this._data.s === undefined) {
+      return false;
+    }
+    const style = this._worksheet.workbook.styles.getStyle(this._data.s);
+    if (!style.numberFormat) {
+      return false;
+    }
+    // Common date format patterns
+    const fmt = style.numberFormat.toLowerCase();
+    return (
+      fmt.includes('y') ||
+      fmt.includes('m') ||
+      fmt.includes('d') ||
+      fmt.includes('h') ||
+      fmt.includes('s') ||
+      fmt === 'general date' ||
+      fmt === 'short date' ||
+      fmt === 'long date'
+    );
   }
 
   /**

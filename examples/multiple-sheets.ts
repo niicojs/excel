@@ -1,7 +1,7 @@
 /**
  * Multiple Sheets Example - Working with multiple worksheets
  *
- * Run with: npx tsx examples/multiple-sheets.ts
+ * Run with: bun examples/multiple-sheets.ts
  */
 import { Workbook } from '../src';
 

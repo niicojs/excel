@@ -1,7 +1,7 @@
 /**
  * Styling Example - Applying styles to cells
  *
- * Run with: npx tsx examples/styling.ts
+ * Run with: bun examples/styling.ts
  */
 import { Workbook } from '../src';
 

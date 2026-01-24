@@ -163,3 +163,31 @@ export interface PivotCacheField {
  * Pivot field axis assignment
  */
 export type PivotFieldAxis = 'row' | 'column' | 'filter' | 'value';
+
+/**
+ * Configuration for creating a sheet from an array of objects
+ */
+export interface SheetFromDataConfig<T extends object = Record<string, unknown>> {
+  /** Name of the sheet to create */
+  name: string;
+  /** Array of objects with the same structure */
+  data: T[];
+  /** Column definitions (optional - defaults to all keys from first object) */
+  columns?: ColumnConfig<T>[];
+  /** Apply header styling (bold text) (default: true) */
+  headerStyle?: boolean;
+  /** Starting cell address (default: 'A1') */
+  startCell?: string;
+}
+
+/**
+ * Column configuration for sheet data
+ */
+export interface ColumnConfig<T = Record<string, unknown>> {
+  /** Key from the object to use for this column */
+  key: keyof T;
+  /** Header text (optional - defaults to key name) */
+  header?: string;
+  /** Cell style for data cells in this column */
+  style?: CellStyle;
+}

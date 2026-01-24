@@ -25,6 +25,9 @@ export type {
   PivotValueConfig,
   AggregationType,
   PivotFieldAxis,
+  // Sheet from data types
+  SheetFromDataConfig,
+  ColumnConfig,
 } from './types';
 
 // Utility exports

@@ -88,6 +88,14 @@ Loading and reading data from an existing Excel file.
 npx tsx examples/read-file.ts
 ```
 
+### sheet-from-objects.ts
+
+Create sheets directly from arrays of objects - great for exporting data from APIs or databases.
+
+```bash
+npx tsx examples/sheet-from-objects.ts
+```
+
 ## Output
 
 All generated Excel files are saved to `examples/output/`. This directory is gitignored.

@@ -1,7 +1,7 @@
 /**
  * Formulas Example - Working with Excel formulas
  *
- * Run with: npx tsx examples/formulas.ts
+ * Run with: bun examples/formulas.ts
  */
 import { Workbook } from '../src';
 

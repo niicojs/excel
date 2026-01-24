@@ -1,7 +1,7 @@
 /**
  * Read File Example - Loading and reading an existing Excel file
  *
- * Run with: npx tsx examples/read-file.ts
+ * Run with: bun examples/read-file.ts
  */
 import { Workbook } from '../src';
 

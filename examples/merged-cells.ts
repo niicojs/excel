@@ -1,7 +1,7 @@
 /**
  * Merged Cells Example - Creating headers with merged cells
  *
- * Run with: npx tsx examples/merged-cells.ts
+ * Run with: bun examples/merged-cells.ts
  */
 import { Workbook } from '../src';
 

@@ -1,5 +1,12 @@
 import { readFile, writeFile } from 'fs/promises';
-import type { SheetDefinition, Relationship, PivotTableConfig, CellValue } from './types';
+import type {
+  SheetDefinition,
+  Relationship,
+  PivotTableConfig,
+  CellValue,
+  SheetFromDataConfig,
+  ColumnConfig,
+} from './types';
 import { Worksheet } from './worksheet';
 import { SharedStrings } from './shared-strings';
 import { Styles } from './styles';
@@ -277,6 +284,126 @@ export class Workbook {
   }
 
   /**
+   * Create a new worksheet from an array of objects.
+   *
+   * The first row contains headers (object keys or custom column headers),
+   * and subsequent rows contain the object values.
+   *
+   * @param config - Configuration for the sheet creation
+   * @returns The created Worksheet
+   *
+   * @example
+   * ```typescript
+   * const data = [
+   *   { name: 'Alice', age: 30, city: 'Paris' },
+   *   { name: 'Bob', age: 25, city: 'London' },
+   *   { name: 'Charlie', age: 35, city: 'Berlin' },
+   * ];
+   *
+   * // Simple usage - all object keys become columns
+   * const sheet = wb.addSheetFromData({
+   *   name: 'People',
+   *   data: data,
+   * });
+   *
+   * // With custom column configuration
+   * const sheet2 = wb.addSheetFromData({
+   *   name: 'People Custom',
+   *   data: data,
+   *   columns: [
+   *     { key: 'name', header: 'Full Name' },
+   *     { key: 'age', header: 'Age (years)' },
+   *   ],
+   * });
+   * ```
+   */
+  addSheetFromData<T extends object>(config: SheetFromDataConfig<T>): Worksheet {
+    const { name, data, columns, headerStyle = true, startCell = 'A1' } = config;
+
+    if (data.length === 0) {
+      // Create empty sheet if no data
+      return this.addSheet(name);
+    }
+
+    // Create the new sheet
+    const sheet = this.addSheet(name);
+
+    // Parse start cell
+    const startAddr = parseAddress(startCell);
+    let startRow = startAddr.row;
+    const startCol = startAddr.col;
+
+    // Determine columns to use
+    const columnConfigs: ColumnConfig<T>[] = columns ?? this._inferColumns(data[0]);
+
+    // Write header row
+    for (let colIdx = 0; colIdx < columnConfigs.length; colIdx++) {
+      const colConfig = columnConfigs[colIdx];
+      const headerText = colConfig.header ?? String(colConfig.key);
+      const cell = sheet.cell(startRow, startCol + colIdx);
+      cell.value = headerText;
+
+      // Apply header style if enabled
+      if (headerStyle) {
+        cell.style = { bold: true };
+      }
+    }
+
+    // Move to data rows
+    startRow++;
+
+    // Write data rows
+    for (let rowIdx = 0; rowIdx < data.length; rowIdx++) {
+      const rowData = data[rowIdx];
+
+      for (let colIdx = 0; colIdx < columnConfigs.length; colIdx++) {
+        const colConfig = columnConfigs[colIdx];
+        const value = rowData[colConfig.key];
+        const cell = sheet.cell(startRow + rowIdx, startCol + colIdx);
+
+        // Convert value to CellValue
+        cell.value = this._toCellValue(value);
+
+        // Apply column style if defined
+        if (colConfig.style) {
+          cell.style = colConfig.style;
+        }
+      }
+    }
+
+    return sheet;
+  }
+
+  /**
+   * Infer column configuration from the first data object
+   */
+  private _inferColumns<T extends object>(sample: T): ColumnConfig<T>[] {
+    return (Object.keys(sample) as (keyof T)[]).map((key) => ({
+      key,
+    }));
+  }
+
+  /**
+   * Convert an unknown value to a CellValue
+   */
+  private _toCellValue(value: unknown): CellValue {
+    if (value === null || value === undefined) {
+      return null;
+    }
+    if (typeof value === 'number' || typeof value === 'string' || typeof value === 'boolean') {
+      return value;
+    }
+    if (value instanceof Date) {
+      return value;
+    }
+    if (typeof value === 'object' && 'error' in value) {
+      return value as CellValue;
+    }
+    // Convert other types to string
+    return String(value);
+  }
+
+  /**
    * Create a pivot table from source data.
    *
    * @param config - Pivot table configuration
@@ -521,7 +648,8 @@ export class Workbook {
       createElement('Relationship', { Id: rel.id, Type: rel.type, Target: rel.target }, []),
     );
 
-    let nextRelId = this._relationships.length + 1;
+    // Calculate next available relationship ID based on existing max ID
+    let nextRelId = Math.max(0, ...this._relationships.map((r) => parseInt(r.id.replace('rId', ''), 10) || 0)) + 1;
 
     // Add shared strings relationship if needed
     if (this._sharedStrings.count > 0) {
