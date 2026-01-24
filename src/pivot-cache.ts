@@ -13,6 +13,7 @@ export class PivotCache {
   private _records: CellValue[][] = [];
   private _recordCount = 0;
   private _refreshOnLoad = true; // Default to true
+  private _dateGrouping = false;
 
   constructor(cacheId: number, sourceSheet: string, sourceRange: string) {
     this._cacheId = cacheId;
@@ -126,6 +127,9 @@ export class PivotCache {
       }
     }
 
+    // Enable date grouping flag if any date field exists
+    this._dateGrouping = this._fields.some((field) => field.isDate);
+
     // Store records
     this._records = data;
   }
@@ -160,6 +164,8 @@ export class PivotCache {
         for (const item of field.sharedItems) {
           sharedItemChildren.push(createElement('s', { v: item }, []));
         }
+      } else if (field.isDate) {
+        sharedItemsAttrs.containsDate = '1';
       } else if (field.isNumeric) {
         // Numeric field - use "0"/"1" for boolean attributes as Excel expects
         sharedItemsAttrs.containsSemiMixedTypes = '0';
@@ -187,7 +193,11 @@ export class PivotCache {
       { ref: this._sourceRange, sheet: this._sourceSheet },
       [],
     );
-    const cacheSourceNode = createElement('cacheSource', { type: 'worksheet' }, [worksheetSourceNode]);
+    const cacheSourceAttrs: Record<string, string> = { type: 'worksheet' };
+    if (this._dateGrouping) {
+      cacheSourceAttrs.grouping = '1';
+    }
+    const cacheSourceNode = createElement('cacheSource', cacheSourceAttrs, [worksheetSourceNode]);
 
     // Build attributes - refreshOnLoad should come early per OOXML schema
     const definitionAttrs: Record<string, string> = {

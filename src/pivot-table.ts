@@ -1,4 +1,4 @@
-import type { AggregationType, PivotFieldAxis } from './types';
+import type { AggregationType, PivotFieldAxis, PivotFieldFilter, PivotSortOrder } from './types';
 import { PivotCache } from './pivot-cache';
 import { createElement, stringifyXml, XmlNode } from './utils/xml';
 
@@ -11,6 +11,8 @@ interface FieldAssignment {
   axis: PivotFieldAxis;
   aggregation?: AggregationType;
   displayName?: string;
+  sortOrder?: PivotSortOrder;
+  filter?: PivotFieldFilter;
 }
 
 /**
@@ -28,6 +30,8 @@ export class PivotTable {
   private _columnFields: FieldAssignment[] = [];
   private _valueFields: FieldAssignment[] = [];
   private _filterFields: FieldAssignment[] = [];
+
+  private _fieldAssignments: Map<number, FieldAssignment> = new Map();
 
   private _pivotTableIndex: number;
 
@@ -94,11 +98,13 @@ export class PivotTable {
       throw new Error(`Field not found in source data: ${fieldName}`);
     }
 
-    this._rowFields.push({
+    const assignment: FieldAssignment = {
       fieldName,
       fieldIndex,
       axis: 'row',
-    });
+    };
+    this._rowFields.push(assignment);
+    this._fieldAssignments.set(fieldIndex, assignment);
 
     return this;
   }
@@ -113,11 +119,13 @@ export class PivotTable {
       throw new Error(`Field not found in source data: ${fieldName}`);
     }
 
-    this._columnFields.push({
+    const assignment: FieldAssignment = {
       fieldName,
       fieldIndex,
       axis: 'column',
-    });
+    };
+    this._columnFields.push(assignment);
+    this._fieldAssignments.set(fieldIndex, assignment);
 
     return this;
   }
@@ -136,13 +144,15 @@ export class PivotTable {
 
     const defaultName = `${aggregation.charAt(0).toUpperCase() + aggregation.slice(1)} of ${fieldName}`;
 
-    this._valueFields.push({
+    const assignment: FieldAssignment = {
       fieldName,
       fieldIndex,
       axis: 'value',
       aggregation,
       displayName: displayName || defaultName,
-    });
+    };
+    this._valueFields.push(assignment);
+    this._fieldAssignments.set(fieldIndex, assignment);
 
     return this;
   }
@@ -157,12 +167,54 @@ export class PivotTable {
       throw new Error(`Field not found in source data: ${fieldName}`);
     }
 
-    this._filterFields.push({
+    const assignment: FieldAssignment = {
       fieldName,
       fieldIndex,
       axis: 'filter',
-    });
+    };
+    this._filterFields.push(assignment);
+    this._fieldAssignments.set(fieldIndex, assignment);
 
+    return this;
+  }
+
+  /**
+   * Set a sort order for a row/column field
+   */
+  sortField(fieldName: string, order: PivotSortOrder): this {
+    const fieldIndex = this._cache.getFieldIndex(fieldName);
+    if (fieldIndex < 0) {
+      throw new Error(`Field not found in source data: ${fieldName}`);
+    }
+
+    const assignment = this._fieldAssignments.get(fieldIndex);
+    if (!assignment || (assignment.axis !== 'row' && assignment.axis !== 'column')) {
+      throw new Error(`Field is not assigned to row or column axis: ${fieldName}`);
+    }
+
+    assignment.sortOrder = order;
+    return this;
+  }
+
+  /**
+   * Filter items for a field (include or exclude list)
+   */
+  filterField(fieldName: string, filter: PivotFieldFilter): this {
+    const fieldIndex = this._cache.getFieldIndex(fieldName);
+    if (fieldIndex < 0) {
+      throw new Error(`Field not found in source data: ${fieldName}`);
+    }
+
+    const assignment = this._fieldAssignments.get(fieldIndex);
+    if (!assignment) {
+      throw new Error(`Field is not assigned to pivot table: ${fieldName}`);
+    }
+
+    if (filter.include && filter.exclude) {
+      throw new Error('Pivot field filter cannot use both include and exclude');
+    }
+
+    assignment.filter = filter;
     return this;
   }
 
@@ -328,15 +380,27 @@ export class PivotTable {
     const filterField = this._filterFields.find((f) => f.fieldIndex === fieldIndex);
     const valueField = this._valueFields.find((f) => f.fieldIndex === fieldIndex);
 
+    const assignment = this._fieldAssignments.get(fieldIndex);
+
     if (rowField) {
       attrs.axis = 'axisRow';
       attrs.showAll = '0';
+      if (assignment?.sortOrder) {
+        attrs.sortType = 'ascending';
+        attrs.sortOrder = assignment.sortOrder === 'asc' ? 'ascending' : 'descending';
+      }
       // Add items for shared values
       const cacheField = this._cache.fields[fieldIndex];
       if (cacheField && cacheField.sharedItems.length > 0) {
         const itemNodes: XmlNode[] = [];
+        const allowedIndexes = this._resolveItemFilter(cacheField.sharedItems, assignment?.filter);
         for (let i = 0; i < cacheField.sharedItems.length; i++) {
-          itemNodes.push(createElement('item', { x: String(i) }, []));
+          const shouldInclude = allowedIndexes.has(i);
+          const itemAttrs: Record<string, string> = { x: String(i) };
+          if (!shouldInclude) {
+            itemAttrs.h = '1';
+          }
+          itemNodes.push(createElement('item', itemAttrs, []));
         }
         // Add default subtotal item
         itemNodes.push(createElement('item', { t: 'default' }, []));
@@ -345,11 +409,21 @@ export class PivotTable {
     } else if (colField) {
       attrs.axis = 'axisCol';
       attrs.showAll = '0';
+      if (assignment?.sortOrder) {
+        attrs.sortType = 'ascending';
+        attrs.sortOrder = assignment.sortOrder === 'asc' ? 'ascending' : 'descending';
+      }
       const cacheField = this._cache.fields[fieldIndex];
       if (cacheField && cacheField.sharedItems.length > 0) {
         const itemNodes: XmlNode[] = [];
+        const allowedIndexes = this._resolveItemFilter(cacheField.sharedItems, assignment?.filter);
         for (let i = 0; i < cacheField.sharedItems.length; i++) {
-          itemNodes.push(createElement('item', { x: String(i) }, []));
+          const shouldInclude = allowedIndexes.has(i);
+          const itemAttrs: Record<string, string> = { x: String(i) };
+          if (!shouldInclude) {
+            itemAttrs.h = '1';
+          }
+          itemNodes.push(createElement('item', itemAttrs, []));
         }
         itemNodes.push(createElement('item', { t: 'default' }, []));
         children.push(createElement('items', { count: String(itemNodes.length) }, itemNodes));
@@ -360,8 +434,14 @@ export class PivotTable {
       const cacheField = this._cache.fields[fieldIndex];
       if (cacheField && cacheField.sharedItems.length > 0) {
         const itemNodes: XmlNode[] = [];
+        const allowedIndexes = this._resolveItemFilter(cacheField.sharedItems, assignment?.filter);
         for (let i = 0; i < cacheField.sharedItems.length; i++) {
-          itemNodes.push(createElement('item', { x: String(i) }, []));
+          const shouldInclude = allowedIndexes.has(i);
+          const itemAttrs: Record<string, string> = { x: String(i) };
+          if (!shouldInclude) {
+            itemAttrs.h = '1';
+          }
+          itemNodes.push(createElement('item', itemAttrs, []));
         }
         itemNodes.push(createElement('item', { t: 'default' }, []));
         children.push(createElement('items', { count: String(itemNodes.length) }, itemNodes));
@@ -374,6 +454,36 @@ export class PivotTable {
     }
 
     return createElement('pivotField', attrs, children);
+  }
+
+  private _resolveItemFilter(items: string[], filter?: PivotFieldFilter): Set<number> {
+    const allowed = new Set<number>();
+
+    if (!filter || (!filter.include && !filter.exclude)) {
+      for (let i = 0; i < items.length; i++) {
+        allowed.add(i);
+      }
+      return allowed;
+    }
+
+    if (filter.include) {
+      for (let i = 0; i < items.length; i++) {
+        if (filter.include.includes(items[i])) {
+          allowed.add(i);
+        }
+      }
+      return allowed;
+    }
+
+    if (filter.exclude) {
+      for (let i = 0; i < items.length; i++) {
+        if (!filter.exclude.includes(items[i])) {
+          allowed.add(i);
+        }
+      }
+    }
+
+    return allowed;
   }
 
   /**

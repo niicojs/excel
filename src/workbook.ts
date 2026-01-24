@@ -7,6 +7,7 @@ import type {
   SheetFromDataConfig,
   ColumnConfig,
   RichCellValue,
+  DateHandling,
 } from './types';
 import { Worksheet } from './worksheet';
 import { SharedStrings } from './shared-strings';
@@ -33,6 +34,9 @@ export class Workbook {
   private _pivotTables: PivotTable[] = [];
   private _pivotCaches: PivotCache[] = [];
   private _nextCacheId = 0;
+
+  // Date serialization handling
+  private _dateHandling: DateHandling = 'jsDate';
 
   private constructor() {
     this._sharedStrings = new SharedStrings();
@@ -117,6 +121,20 @@ export class Workbook {
    */
   get styles(): Styles {
     return this._styles;
+  }
+
+  /**
+   * Get the workbook date handling strategy.
+   */
+  get dateHandling(): DateHandling {
+    return this._dateHandling;
+  }
+
+  /**
+   * Set the workbook date handling strategy.
+   */
+  set dateHandling(value: DateHandling) {
+    this._dateHandling = value;
   }
 
   /**

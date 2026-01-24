@@ -72,6 +72,8 @@ describe('parseAddress', () => {
     expect(() => parseAddress('1')).toThrow();
     expect(() => parseAddress('A')).toThrow();
     expect(() => parseAddress('1A')).toThrow();
+    expect(() => parseAddress('A0')).toThrow();
+    expect(() => parseAddress('A-1')).toThrow();
   });
 });
 

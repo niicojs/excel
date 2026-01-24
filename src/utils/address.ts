@@ -41,8 +41,11 @@ export const parseAddress = (address: string): CellAddress => {
   if (!match) {
     throw new Error(`Invalid cell address: ${address}`);
   }
+  const rowNumber = +match[2];
+  if (rowNumber <= 0) throw new Error(`Invalid cell address: ${address}`);
+
   const col = letterToCol(match[1].toUpperCase());
-  const row = parseInt(match[2], 10) - 1; // Convert to 0-based
+  const row = rowNumber - 1; // Convert to 0-based
   return { row, col };
 };
 

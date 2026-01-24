@@ -330,8 +330,56 @@ interface SheetToJsonConfig {
   endRow?: number;
   endCol?: number;
   stopOnEmptyRow?: boolean; // Default: true
+  dateHandling?: 'jsDate' | 'excelSerial' | 'isoString'; // Default: 'jsDate'
 }
 ```
+
+## Style Schema
+
+Supported style properties (CellStyle):
+
+```typescript
+interface CellStyle {
+  bold?: boolean;
+  italic?: boolean;
+  underline?: boolean | 'single' | 'double';
+  strike?: boolean;
+  fontSize?: number;
+  fontName?: string;
+  fontColor?: string; // Hex (RGB/RRGGBB/AARRGGBB)
+  fill?: string; // Hex (RGB/RRGGBB/AARRGGBB)
+  border?: {
+    top?: 'thin' | 'medium' | 'thick' | 'double' | 'dotted' | 'dashed';
+    bottom?: 'thin' | 'medium' | 'thick' | 'double' | 'dotted' | 'dashed';
+    left?: 'thin' | 'medium' | 'thick' | 'double' | 'dotted' | 'dashed';
+    right?: 'thin' | 'medium' | 'thick' | 'double' | 'dotted' | 'dashed';
+  };
+  alignment?: {
+    horizontal?: 'left' | 'center' | 'right' | 'justify';
+    vertical?: 'top' | 'middle' | 'bottom';
+    wrapText?: boolean;
+    textRotation?: number;
+  };
+  numberFormat?: string; // Excel format code
+}
+```
+
+## Performance and Large Files
+
+Tips for large sheets and high-volume writes:
+
+- Prefer `addSheetFromData` for bulk writes when possible.
+- Use `range.getValues({ createMissing: false })` to avoid creating empty cells during reads.
+- Keep shared strings small: prefer numbers/booleans where applicable.
+- Avoid frequent `toBuffer()` calls in loops; batch writes and serialize once.
+
+## Limitations
+
+The library focuses on preserving existing structure and editing common parts of workbooks.
+
+- Chart editing is not supported (charts are preserved only).
+- Conditional formatting and data validation are preserved but not editable yet.
+- Some advanced Excel features (sparklines, slicers, macros) are preserved only.
 
 ## Format Preservation
 

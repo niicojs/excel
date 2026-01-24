@@ -42,12 +42,25 @@ export class Range {
    * Get all values in the range as a 2D array
    */
   get values(): CellValue[][] {
+    return this.getValues();
+  }
+
+  /**
+   * Get all values in the range as a 2D array with options
+   */
+  getValues(options: { createMissing?: boolean } = {}): CellValue[][] {
+    const { createMissing = true } = options;
     const result: CellValue[][] = [];
     for (let r = this._range.start.row; r <= this._range.end.row; r++) {
       const row: CellValue[] = [];
       for (let c = this._range.start.col; c <= this._range.end.col; c++) {
-        const cell = this._worksheet.cell(r, c);
-        row.push(cell.value);
+        if (createMissing) {
+          const cell = this._worksheet.cell(r, c);
+          row.push(cell.value);
+        } else {
+          const cell = this._worksheet.getCellIfExists(r, c);
+          row.push(cell?.value ?? null);
+        }
       }
       result.push(row);
     }

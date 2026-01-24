@@ -35,6 +35,7 @@ export class Styles {
 
   // Cache for style deduplication
   private _styleCache: Map<string, number> = new Map();
+  private _styleObjectCache: Map<number, CellStyle> = new Map();
 
   /**
    * Parse styles from XML content
@@ -228,6 +229,9 @@ export class Styles {
    * Get a style by index
    */
   getStyle(index: number): CellStyle {
+    const cached = this._styleObjectCache.get(index);
+    if (cached) return { ...cached };
+
     const xf = this._cellXfs[index];
     if (!xf) return {};
 
@@ -276,6 +280,7 @@ export class Styles {
       };
     }
 
+    this._styleObjectCache.set(index, { ...style });
     return style;
   }
 
@@ -324,8 +329,17 @@ export class Styles {
     const index = this._cellXfs.length;
     this._cellXfs.push(xf);
     this._styleCache.set(key, index);
+    this._styleObjectCache.set(index, { ...style });
 
     return index;
+  }
+
+  /**
+   * Clone an existing style by index, optionally overriding fields.
+   */
+  cloneStyle(index: number, overrides: Partial<CellStyle> = {}): number {
+    const baseStyle = this.getStyle(index);
+    return this.createStyle({ ...baseStyle, ...overrides });
   }
 
   private _findOrCreateFont(style: CellStyle): number {

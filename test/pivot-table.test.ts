@@ -113,6 +113,23 @@ describe('PivotTable', () => {
       expect(cache.fields[2].minValue).toBe(100);
       expect(cache.fields[2].maxValue).toBe(250);
     });
+
+    it('marks date fields for grouping', () => {
+      wb.addSheet('Dates');
+      const sheet = wb.sheet('Dates');
+      sheet.cell('A1').value = 'Date';
+      sheet.cell('B1').value = 'Value';
+      sheet.cell('A2').value = new Date('2024-03-01');
+      sheet.cell('B2').value = 10;
+
+      const pivot = wb.createPivotTable({
+        name: 'DatePivot',
+        source: 'Dates!A1:B2',
+        target: 'DatePivotSheet!A1',
+      });
+
+      expect(pivot.cache.fields[0].isDate).toBe(true);
+    });
   });
 
   describe('fluent API', () => {
@@ -180,6 +197,24 @@ describe('PivotTable', () => {
       expect(pivot.name).toBe('SalesPivot');
     });
 
+    it('supports sorting and filtering fields', () => {
+      const pivot = wb
+        .createPivotTable({
+          name: 'SalesPivot',
+          source: 'Sheet1!A1:D7',
+          target: 'PivotSheet!A3',
+        })
+        .addRowField('Region')
+        .addColumnField('Product')
+        .addValueField('Sales', 'sum')
+        .sortField('Region', 'asc')
+        .filterField('Product', { exclude: ['Gadget'] });
+
+      const xml = pivot.toXml();
+      expect(xml).toContain('sortOrder="ascending"');
+      expect(xml).toContain('h="1"');
+    });
+
     it('throws when adding non-existent field', () => {
       const pivot = wb.createPivotTable({
         name: 'SalesPivot',
@@ -213,6 +248,29 @@ describe('PivotTable', () => {
       const wb2 = await Workbook.fromBuffer(buffer);
       expect(wb2.sheetNames).toContain('Sheet1');
       expect(wb2.sheetNames).toContain('PivotSheet');
+    });
+
+    it('preserves date fields in the pivot cache', async () => {
+      wb.addSheet('Dates');
+      const dateSheet = wb.sheet('Dates');
+      dateSheet.cell('A1').value = 'Date';
+      dateSheet.cell('B1').value = 'Value';
+      dateSheet.cell('A2').value = new Date('2024-03-01');
+      dateSheet.cell('B2').value = 100;
+      dateSheet.cell('A3').value = new Date('2024-03-02');
+      dateSheet.cell('B3').value = 200;
+
+      const pivot = wb.createPivotTable({
+        name: 'DatePivot',
+        source: 'Dates!A1:B3',
+        target: 'DatePivotSheet!A1',
+      });
+
+      const buffer = await wb.toBuffer();
+      expect(buffer.length).toBeGreaterThan(0);
+
+      expect(pivot.cache.fields[0].isDate).toBe(true);
+      expect(pivot.cache.fields[0].isNumeric).toBe(false);
     });
 
     it('generates multiple pivot tables', async () => {

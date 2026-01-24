@@ -91,6 +91,41 @@ describe('Workbook', () => {
       expect(copy.cell('A1').value).toBe('Hello');
       expect(copy.cell('B1').value).toBe(42);
     });
+
+    it('supports column widths, row heights, and frozen panes', () => {
+      const wb = Workbook.create();
+      wb.addSheet('Sheet1');
+      const sheet = wb.sheet('Sheet1');
+
+      sheet.setColumnWidth('B', 22);
+      sheet.setRowHeight(2, 18);
+      sheet.freezePane(1, 1);
+
+      const frozen = sheet.getFrozenPane();
+      expect(frozen).toEqual({ row: 1, col: 1 });
+      expect(sheet.getColumnWidth('B')).toBe(22);
+      expect(sheet.getRowHeight(2)).toBe(18);
+    });
+
+    it('uses lazy range reads to avoid extra cells', () => {
+      const wb = Workbook.create();
+      wb.addSheet('Sheet1');
+      const sheet = wb.sheet('Sheet1');
+
+      sheet.cell('A1').value = 1;
+
+      const range = sheet.range('A1:C3');
+      const before = sheet.cells.size;
+      const values = range.getValues({ createMissing: false });
+      const after = sheet.cells.size;
+
+      expect(values).toEqual([
+        [1, null, null],
+        [null, null, null],
+        [null, null, null],
+      ]);
+      expect(after).toBe(before);
+    });
   });
 
   describe('cell operations', () => {
@@ -140,6 +175,17 @@ describe('Workbook', () => {
       expect(result.getFullYear()).toBe(2024);
       expect(result.getMonth()).toBe(0); // January
       expect(result.getDate()).toBe(15);
+    });
+
+    it('handles error values', () => {
+      const wb = Workbook.create();
+      wb.addSheet('Sheet1');
+      const sheet = wb.sheet(0);
+
+      sheet.cell('A1').value = { error: '#DIV/0!' };
+
+      expect(sheet.cell('A1').type).toBe('error');
+      expect(sheet.cell('A1').value).toEqual({ error: '#DIV/0!' });
     });
 
     it('reads and writes formulas', () => {
@@ -208,6 +254,25 @@ describe('Workbook', () => {
       expect(sheet.cell('B1').value).toBe(2);
       expect(sheet.cell('A2').value).toBe(3);
       expect(sheet.cell('B2').value).toBe(4);
+    });
+
+    it('reads range values without creating missing cells', () => {
+      const wb = Workbook.create();
+      wb.addSheet('Sheet1');
+      const sheet = wb.sheet(0);
+
+      sheet.cell('A1').value = 10;
+
+      const range = sheet.range('A1:B2');
+      const before = sheet.cells.size;
+      const values = range.getValues({ createMissing: false });
+      const after = sheet.cells.size;
+
+      expect(values).toEqual([
+        [10, null],
+        [null, null],
+      ]);
+      expect(after).toBe(before);
     });
 
     it('writes a 2D array starting at a cell', () => {
@@ -299,6 +364,36 @@ describe('Workbook', () => {
       expect(sheet.cell('A2').style.bold).toBe(true);
       expect(sheet.cell('B2').style.bold).toBe(true);
     });
+
+    it('caches style objects', () => {
+      const wb = Workbook.create();
+      wb.addSheet('Sheet1');
+      const styles = wb.styles;
+
+      const index = styles.createStyle({ bold: true, italic: true });
+      const first = styles.getStyle(index);
+      const second = styles.getStyle(index);
+
+      expect(first).toEqual(second);
+    });
+
+    it('clones styles with overrides', () => {
+      const wb = Workbook.create();
+      wb.addSheet('Sheet1');
+      const styles = wb.styles;
+
+      const baseIndex = styles.createStyle({ bold: true, fontSize: 12 });
+      const cloneIndex = styles.cloneStyle(baseIndex, { italic: true });
+
+      const baseStyle = styles.getStyle(baseIndex);
+      const cloneStyle = styles.getStyle(cloneIndex);
+
+      expect(baseStyle.bold).toBe(true);
+      expect(baseStyle.italic).toBeUndefined();
+      expect(cloneStyle.bold).toBe(true);
+      expect(cloneStyle.italic).toBe(true);
+      expect(cloneStyle.fontSize).toBe(12);
+    });
   });
 
   describe('save and load', () => {
@@ -376,6 +471,82 @@ describe('Workbook', () => {
       const style = loadedSheet.cell('A1').style;
       expect(style.bold).toBe(true);
       expect(style.italic).toBe(true);
+    });
+
+    it('preserves column widths, row heights, and freeze panes after save/load', async () => {
+      const wb = Workbook.create();
+      wb.addSheet('Sheet1');
+      const sheet = wb.sheet(0);
+
+      sheet.setColumnWidth('B', 24);
+      sheet.setRowHeight(1, 20);
+      sheet.freezePane(1, 2);
+
+      const buffer = await wb.toBuffer();
+      const loaded = await Workbook.fromBuffer(buffer);
+      const loadedSheet = loaded.sheet(0);
+
+      expect(loadedSheet.getColumnWidth('B')).toBe(24);
+      expect(loadedSheet.getRowHeight(1)).toBe(20);
+      expect(loadedSheet.getFrozenPane()).toEqual({ row: 1, col: 2 });
+    });
+
+    it('preserves merged cells, formulas, and styles together', async () => {
+      const wb = Workbook.create();
+      wb.addSheet('Sheet1');
+      const sheet = wb.sheet(0);
+
+      sheet.cell('A1').value = 'Header';
+      sheet.cell('A1').style = { bold: true, fill: '#FFEEAA' };
+      sheet.mergeCells('A1:C1');
+
+      sheet.cell('A2').value = 10;
+      sheet.cell('A3').value = 20;
+      sheet.cell('A4').formula = 'SUM(A2:A3)';
+      sheet.cell('A4').style = { numberFormat: '0.00' };
+
+      const buffer = await wb.toBuffer();
+      const loaded = await Workbook.fromBuffer(buffer);
+      const loadedSheet = loaded.sheet(0);
+
+      expect(loadedSheet.mergedCells).toContain('A1:C1');
+      expect(loadedSheet.cell('A4').formula).toBe('SUM(A2:A3)');
+      expect(loadedSheet.cell('A1').style.bold).toBe(true);
+      expect(loadedSheet.cell('A4').style.numberFormat).toBe('0.00');
+    });
+
+    it('preserves date formats after save/load', async () => {
+      const wb = Workbook.create();
+      wb.addSheet('Sheet1');
+      const sheet = wb.sheet(0);
+      const date = new Date('2024-02-03T15:30:00Z');
+
+      sheet.cell('B2').style = { numberFormat: 'mm/dd/yyyy hh:mm' };
+      sheet.cell('B2').value = date;
+
+      const buffer = await wb.toBuffer();
+      const loaded = await Workbook.fromBuffer(buffer);
+      const loadedSheet = loaded.sheet(0);
+
+      const loadedValue = loadedSheet.cell('B2').value as Date;
+      expect(loadedValue).toBeInstanceOf(Date);
+      expect(loadedSheet.cell('B2').type).toBe('date');
+      expect(loadedSheet.cell('B2').style.numberFormat).toBe('mm/dd/yyyy hh:mm');
+    });
+
+    it('preserves error values after save/load', async () => {
+      const wb = Workbook.create();
+      wb.addSheet('Sheet1');
+      const sheet = wb.sheet(0);
+
+      sheet.cell('C3').value = { error: '#VALUE!' };
+
+      const buffer = await wb.toBuffer();
+      const loaded = await Workbook.fromBuffer(buffer);
+      const loadedSheet = loaded.sheet(0);
+
+      expect(loadedSheet.cell('C3').type).toBe('error');
+      expect(loadedSheet.cell('C3').value).toEqual({ error: '#VALUE!' });
     });
   });
 
@@ -868,6 +1039,33 @@ describe('Workbook', () => {
       expect(result).toEqual([{ name: 'Alice', age: 30 }]);
     });
 
+    it('serializes dates as excel serial values', () => {
+      const wb = Workbook.create();
+      wb.addSheet('Data');
+      const sheet = wb.sheet('Data');
+
+      sheet.cell('A1').value = 'date';
+      sheet.cell('A2').value = new Date('2024-06-15');
+
+      const result = sheet.toJson({ dateHandling: 'excelSerial' });
+
+      expect(typeof result[0].date).toBe('number');
+      expect((result[0].date as number) > 45000).toBe(true);
+    });
+
+    it('serializes dates as ISO strings', () => {
+      const wb = Workbook.create();
+      wb.addSheet('Data');
+      const sheet = wb.sheet('Data');
+
+      sheet.cell('A1').value = 'date';
+      sheet.cell('A2').value = new Date('2024-06-15T10:30:00Z');
+
+      const result = sheet.toJson({ dateHandling: 'isoString' });
+
+      expect(result[0].date).toBe('2024-06-15T10:30:00.000Z');
+    });
+
     it('handles endRow option', () => {
       const wb = Workbook.create();
       wb.addSheet('Data');
@@ -1002,6 +1200,21 @@ describe('Workbook', () => {
       const result = sheet.toJson();
 
       expect(result).toEqual([{ name: 'Alice', column1: 30, city: 'Paris' }]);
+    });
+
+    it('handles duplicate headers by keeping the last value', () => {
+      const wb = Workbook.create();
+      wb.addSheet('Data');
+      const sheet = wb.sheet('Data');
+
+      sheet.cell('A1').value = 'name';
+      sheet.cell('B1').value = 'name';
+      sheet.cell('A2').value = 'Alice';
+      sheet.cell('B2').value = 'Bob';
+
+      const result = sheet.toJson();
+
+      expect(result).toEqual([{ name: 'Bob' }]);
     });
 
     it('works with typed generic', () => {

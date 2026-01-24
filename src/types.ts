@@ -18,6 +18,11 @@ export type ErrorType = '#NULL!' | '#DIV/0!' | '#VALUE!' | '#REF!' | '#NAME?' | 
 export type CellType = 'number' | 'string' | 'boolean' | 'date' | 'error' | 'empty';
 
 /**
+ * Date handling strategy when serializing cell values.
+ */
+export type DateHandling = 'jsDate' | 'excelSerial' | 'isoString';
+
+/**
  * Style definition for cells
  */
 export interface CellStyle {
@@ -112,6 +117,19 @@ export interface Relationship {
  * Pivot table aggregation functions
  */
 export type AggregationType = 'sum' | 'count' | 'average' | 'min' | 'max';
+
+/**
+ * Sort order for pivot fields.
+ */
+export type PivotSortOrder = 'asc' | 'desc';
+
+/**
+ * Filter configuration for pivot fields.
+ */
+export interface PivotFieldFilter {
+  include?: string[];
+  exclude?: string[];
+}
 
 /**
  * Configuration for a value field in a pivot table
@@ -242,4 +260,9 @@ export interface SheetToJsonConfig {
    * If true, stop reading when an empty row is encountered. Defaults to true.
    */
   stopOnEmptyRow?: boolean;
+
+  /**
+   * How to serialize Date values. Defaults to 'jsDate'.
+   */
+  dateHandling?: DateHandling;
 }

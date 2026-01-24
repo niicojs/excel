@@ -1,8 +1,8 @@
-import type { CellData, RangeAddress, SheetToJsonConfig, CellValue } from './types';
+import type { CellData, RangeAddress, SheetToJsonConfig, CellValue, DateHandling } from './types';
 import type { Workbook } from './workbook';
 import { Cell, parseCellRef } from './cell';
 import { Range } from './range';
-import { parseRange, toAddress, parseAddress } from './utils/address';
+import { parseRange, toAddress, parseAddress, letterToCol } from './utils/address';
 import {
   parseXml,
   findElement,
@@ -25,6 +25,11 @@ export class Worksheet {
   private _dirty = false;
   private _mergedCells: Set<string> = new Set();
   private _sheetData: XmlNode[] = [];
+  private _columnWidths: Map<number, number> = new Map();
+  private _rowHeights: Map<number, number> = new Map();
+  private _frozenPane: { row: number; col: number } | null = null;
+  private _dataBoundsCache: { minRow: number; maxRow: number; minCol: number; maxCol: number } | null = null;
+  private _boundsDirty = true;
 
   constructor(workbook: Workbook, name: string) {
     this._workbook = workbook;
@@ -63,11 +68,47 @@ export class Worksheet {
 
     const worksheetChildren = getChildren(worksheet, 'worksheet');
 
+    // Parse sheet views (freeze panes)
+    const sheetViews = findElement(worksheetChildren, 'sheetViews');
+    if (sheetViews) {
+      const viewChildren = getChildren(sheetViews, 'sheetViews');
+      const sheetView = findElement(viewChildren, 'sheetView');
+      if (sheetView) {
+        const sheetViewChildren = getChildren(sheetView, 'sheetView');
+        const pane = findElement(sheetViewChildren, 'pane');
+        if (pane && getAttr(pane, 'state') === 'frozen') {
+          const xSplit = parseInt(getAttr(pane, 'xSplit') || '0', 10);
+          const ySplit = parseInt(getAttr(pane, 'ySplit') || '0', 10);
+          if (xSplit > 0 || ySplit > 0) {
+            this._frozenPane = { row: ySplit, col: xSplit };
+          }
+        }
+      }
+    }
+
     // Parse sheet data (cells)
     const sheetData = findElement(worksheetChildren, 'sheetData');
     if (sheetData) {
       this._sheetData = getChildren(sheetData, 'sheetData');
       this._parseSheetData(this._sheetData);
+    }
+
+    // Parse column widths
+    const cols = findElement(worksheetChildren, 'cols');
+    if (cols) {
+      const colChildren = getChildren(cols, 'cols');
+      for (const col of colChildren) {
+        if (!('col' in col)) continue;
+        const min = parseInt(getAttr(col, 'min') || '0', 10);
+        const max = parseInt(getAttr(col, 'max') || '0', 10);
+        const width = parseFloat(getAttr(col, 'width') || '0');
+        if (!Number.isFinite(width) || width <= 0) continue;
+        if (min > 0 && max > 0) {
+          for (let idx = min; idx <= max; idx++) {
+            this._columnWidths.set(idx - 1, width);
+          }
+        }
+      }
     }
 
     // Parse merged cells
@@ -92,6 +133,12 @@ export class Worksheet {
     for (const rowNode of rows) {
       if (!('row' in rowNode)) continue;
 
+      const rowIndex = parseInt(getAttr(rowNode, 'r') || '0', 10) - 1;
+      const rowHeight = parseFloat(getAttr(rowNode, 'ht') || '0');
+      if (rowIndex >= 0 && Number.isFinite(rowHeight) && rowHeight > 0) {
+        this._rowHeights.set(rowIndex, rowHeight);
+      }
+
       const rowChildren = getChildren(rowNode, 'row');
       for (const cellNode of rowChildren) {
         if (!('c' in cellNode)) continue;
@@ -105,6 +152,8 @@ export class Worksheet {
         this._cells.set(ref, cell);
       }
     }
+
+    this._boundsDirty = true;
   }
 
   /**
@@ -205,9 +254,19 @@ export class Worksheet {
     if (!cell) {
       cell = new Cell(this, row, c);
       this._cells.set(address, cell);
+      this._boundsDirty = true;
     }
 
     return cell;
+  }
+
+  /**
+   * Get an existing cell without creating it.
+   */
+  getCellIfExists(rowOrAddress: number | string, col?: number): Cell | undefined {
+    const { row, col: c } = parseCellRef(rowOrAddress, col);
+    const address = toAddress(row, c);
+    return this._cells.get(address);
   }
 
   /**
@@ -281,6 +340,75 @@ export class Worksheet {
   }
 
   /**
+   * Set a column width (0-based index or column letter)
+   */
+  setColumnWidth(col: number | string, width: number): void {
+    if (!Number.isFinite(width) || width <= 0) {
+      throw new Error('Column width must be a positive number');
+    }
+
+    const colIndex = typeof col === 'number' ? col : letterToCol(col);
+    if (colIndex < 0) {
+      throw new Error(`Invalid column: ${col}`);
+    }
+
+    this._columnWidths.set(colIndex, width);
+    this._dirty = true;
+  }
+
+  /**
+   * Get a column width if set
+   */
+  getColumnWidth(col: number | string): number | undefined {
+    const colIndex = typeof col === 'number' ? col : letterToCol(col);
+    return this._columnWidths.get(colIndex);
+  }
+
+  /**
+   * Set a row height (0-based index)
+   */
+  setRowHeight(row: number, height: number): void {
+    if (!Number.isFinite(height) || height <= 0) {
+      throw new Error('Row height must be a positive number');
+    }
+    if (row < 0) {
+      throw new Error('Row index must be >= 0');
+    }
+
+    this._rowHeights.set(row, height);
+    this._dirty = true;
+  }
+
+  /**
+   * Get a row height if set
+   */
+  getRowHeight(row: number): number | undefined {
+    return this._rowHeights.get(row);
+  }
+
+  /**
+   * Freeze panes at a given row/column split (counts from top-left)
+   */
+  freezePane(rowSplit: number, colSplit: number): void {
+    if (rowSplit < 0 || colSplit < 0) {
+      throw new Error('Freeze pane splits must be >= 0');
+    }
+    if (rowSplit === 0 && colSplit === 0) {
+      this._frozenPane = null;
+    } else {
+      this._frozenPane = { row: rowSplit, col: colSplit };
+    }
+    this._dirty = true;
+  }
+
+  /**
+   * Get current frozen pane configuration
+   */
+  getFrozenPane(): { row: number; col: number } | null {
+    return this._frozenPane ? { ...this._frozenPane } : null;
+  }
+
+  /**
    * Convert sheet data to an array of JSON objects.
    *
    * @param config - Configuration options
@@ -299,7 +427,15 @@ export class Worksheet {
    * ```
    */
   toJson<T = Record<string, CellValue>>(config: SheetToJsonConfig = {}): T[] {
-    const { fields, startRow = 0, startCol = 0, endRow, endCol, stopOnEmptyRow = true } = config;
+    const {
+      fields,
+      startRow = 0,
+      startCol = 0,
+      endRow,
+      endCol,
+      stopOnEmptyRow = true,
+      dateHandling = this._workbook.dateHandling,
+    } = config;
 
     // Get the bounds of data in the sheet
     const bounds = this._getDataBounds();
@@ -339,7 +475,11 @@ export class Worksheet {
       for (let colOffset = 0; colOffset < fieldNames.length; colOffset++) {
         const col = startCol + colOffset;
         const cell = this._cells.get(toAddress(row, col));
-        const value = cell?.value ?? null;
+        let value = cell?.value ?? null;
+
+        if (value instanceof Date) {
+          value = this._serializeDate(value, dateHandling, cell);
+        }
 
         if (value !== null) {
           hasData = true;
@@ -362,11 +502,29 @@ export class Worksheet {
     return result;
   }
 
+  private _serializeDate(value: Date, dateHandling: DateHandling, cell?: Cell | null): CellValue | number | string {
+    if (dateHandling === 'excelSerial') {
+      return cell?._jsDateToExcel(value) ?? value;
+    }
+
+    if (dateHandling === 'isoString') {
+      return value.toISOString();
+    }
+
+    return value;
+  }
+
   /**
    * Get the bounds of data in the sheet (min/max row and column with data)
    */
   private _getDataBounds(): { minRow: number; maxRow: number; minCol: number; maxCol: number } | null {
+    if (!this._boundsDirty && this._dataBoundsCache) {
+      return this._dataBoundsCache;
+    }
+
     if (this._cells.size === 0) {
+      this._dataBoundsCache = null;
+      this._boundsDirty = false;
       return null;
     }
 
@@ -385,10 +543,14 @@ export class Worksheet {
     }
 
     if (minRow === Infinity) {
+      this._dataBoundsCache = null;
+      this._boundsDirty = false;
       return null;
     }
 
-    return { minRow, maxRow, minCol, maxCol };
+    this._dataBoundsCache = { minRow, maxRow, minCol, maxCol };
+    this._boundsDirty = false;
+    return this._dataBoundsCache;
   }
 
   /**
@@ -405,6 +567,12 @@ export class Worksheet {
       rowMap.get(row)!.push(cell);
     }
 
+    for (const rowIdx of this._rowHeights.keys()) {
+      if (!rowMap.has(rowIdx)) {
+        rowMap.set(rowIdx, []);
+      }
+    }
+
     // Sort rows and cells
     const sortedRows = Array.from(rowMap.entries()).sort((a, b) => a[0] - b[0]);
 
@@ -418,14 +586,74 @@ export class Worksheet {
         cellNodes.push(cellNode);
       }
 
-      const rowNode = createElement('row', { r: String(rowIdx + 1) }, cellNodes);
+      const rowAttrs: Record<string, string> = { r: String(rowIdx + 1) };
+      const rowHeight = this._rowHeights.get(rowIdx);
+      if (rowHeight !== undefined) {
+        rowAttrs.ht = String(rowHeight);
+        rowAttrs.customHeight = '1';
+      }
+      const rowNode = createElement('row', rowAttrs, cellNodes);
       rowNodes.push(rowNode);
     }
 
     const sheetDataNode = createElement('sheetData', {}, rowNodes);
 
     // Build worksheet structure
-    const worksheetChildren: XmlNode[] = [sheetDataNode];
+    const worksheetChildren: XmlNode[] = [];
+
+    // Sheet views (freeze panes)
+    if (this._frozenPane) {
+      const paneAttrs: Record<string, string> = { state: 'frozen' };
+      const topLeftCell = toAddress(this._frozenPane.row, this._frozenPane.col);
+      paneAttrs.topLeftCell = topLeftCell;
+      if (this._frozenPane.col > 0) {
+        paneAttrs.xSplit = String(this._frozenPane.col);
+      }
+      if (this._frozenPane.row > 0) {
+        paneAttrs.ySplit = String(this._frozenPane.row);
+      }
+
+      let activePane = 'bottomRight';
+      if (this._frozenPane.row > 0 && this._frozenPane.col === 0) {
+        activePane = 'bottomLeft';
+      } else if (this._frozenPane.row === 0 && this._frozenPane.col > 0) {
+        activePane = 'topRight';
+      }
+
+      paneAttrs.activePane = activePane;
+      const paneNode = createElement('pane', paneAttrs, []);
+      const selectionNode = createElement(
+        'selection',
+        { pane: activePane, activeCell: topLeftCell, sqref: topLeftCell },
+        [],
+      );
+
+      const sheetViewNode = createElement('sheetView', { workbookViewId: '0' }, [paneNode, selectionNode]);
+      worksheetChildren.push(createElement('sheetViews', {}, [sheetViewNode]));
+    }
+
+    // Column widths
+    if (this._columnWidths.size > 0) {
+      const colNodes: XmlNode[] = [];
+      const entries = Array.from(this._columnWidths.entries()).sort((a, b) => a[0] - b[0]);
+      for (const [colIndex, width] of entries) {
+        colNodes.push(
+          createElement(
+            'col',
+            {
+              min: String(colIndex + 1),
+              max: String(colIndex + 1),
+              width: String(width),
+              customWidth: '1',
+            },
+            [],
+          ),
+        );
+      }
+      worksheetChildren.push(createElement('cols', {}, colNodes));
+    }
+
+    worksheetChildren.push(sheetDataNode);
 
     // Add merged cells if any
     if (this._mergedCells.size > 0) {
