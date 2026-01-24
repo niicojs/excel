@@ -1,7 +1,7 @@
 /**
  * Data Array Example - Working with 2D arrays
  *
- * Run with: npx tsx examples/data-array.ts
+ * Run with: bun examples/data-array.ts
  */
 import { Workbook } from '../src';
 

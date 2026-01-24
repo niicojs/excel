@@ -10,6 +10,26 @@ import {
 } from './utils/xml';
 
 /**
+ * Normalize a color to ARGB format (8 hex chars).
+ * Accepts: "#RGB", "#RRGGBB", "RGB", "RRGGBB", "AARRGGBB", "#AARRGGBB"
+ */
+const normalizeColor = (color: string): string => {
+  let c = color.replace(/^#/, '').toUpperCase();
+
+  // Handle shorthand 3-char format (e.g., "FFF" -> "FFFFFF")
+  if (c.length === 3) {
+    c = c[0] + c[0] + c[1] + c[1] + c[2] + c[2];
+  }
+
+  // Add alpha channel if not present (6 chars -> 8 chars)
+  if (c.length === 6) {
+    c = 'FF' + c;
+  }
+
+  return c;
+};
+
+/**
  * Manages the styles (xl/styles.xml)
  */
 export class Styles {
@@ -473,7 +493,7 @@ export class Styles {
     if (font.underline) children.push(createElement('u', {}, []));
     if (font.strike) children.push(createElement('strike', {}, []));
     if (font.size) children.push(createElement('sz', { val: String(font.size) }, []));
-    if (font.color) children.push(createElement('color', { rgb: font.color }, []));
+    if (font.color) children.push(createElement('color', { rgb: normalizeColor(font.color) }, []));
     if (font.name) children.push(createElement('name', { val: font.name }, []));
     return createElement('font', {}, children);
   }
@@ -481,10 +501,16 @@ export class Styles {
   private _buildFillNode(fill: StyleFill): XmlNode {
     const patternChildren: XmlNode[] = [];
     if (fill.fgColor) {
-      patternChildren.push(createElement('fgColor', { rgb: fill.fgColor }, []));
+      const rgb = normalizeColor(fill.fgColor);
+      patternChildren.push(createElement('fgColor', { rgb }, []));
+      // For solid fills, bgColor is required (indexed 64 = system background)
+      if (fill.type === 'solid') {
+        patternChildren.push(createElement('bgColor', { indexed: '64' }, []));
+      }
     }
-    if (fill.bgColor) {
-      patternChildren.push(createElement('bgColor', { rgb: fill.bgColor }, []));
+    if (fill.bgColor && fill.type !== 'solid') {
+      const rgb = normalizeColor(fill.bgColor);
+      patternChildren.push(createElement('bgColor', { rgb }, []));
     }
     const patternFill = createElement('patternFill', { patternType: fill.type || 'none' }, patternChildren);
     return createElement('fill', {}, [patternFill]);
