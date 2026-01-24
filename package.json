@@ -1,12 +1,17 @@
 {
   "name": "@niicojs/excel",
   "version": "0.1.0",
+  "description": "typescript library to manipulate excel files",
+  "homepage": "https://github.com/niicojs/excel#readme",
+  "bugs": {
+    "url": "https://github.com/niicojs/excel/issues"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/niicojs/excel.git"
+  },
   "license": "MIT",
   "author": "niico",
-  "files": [
-    "dist",
-    "src"
-  ],
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -24,6 +29,10 @@
     },
     "./package.json": "./package.json"
   },
+  "files": [
+    "dist",
+    "src"
+  ],
   "scripts": {
     "dev": "tsdx dev",
     "build": "tsdx build",
