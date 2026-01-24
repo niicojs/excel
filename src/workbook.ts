@@ -369,15 +369,9 @@ export class Workbook {
         // Check if value is a rich cell definition
         if (this._isRichCellValue(value)) {
           const richValue = value as RichCellValue;
-          if (richValue.value !== undefined) {
-            cell.value = richValue.value;
-          }
-          if (richValue.formula !== undefined) {
-            cell.formula = richValue.formula;
-          }
-          if (richValue.style !== undefined) {
-            cell.style = richValue.style;
-          }
+          if (richValue.value !== undefined) cell.value = richValue.value;
+          if (richValue.formula !== undefined) cell.formula = richValue.formula;
+          if (richValue.style !== undefined) cell.style = richValue.style;
         } else {
           // Convert value to CellValue
           cell.value = this._toCellValue(value);
@@ -385,7 +379,7 @@ export class Workbook {
 
         // Apply column style if defined (merged with cell style)
         if (colConfig.style) {
-          cell.style = colConfig.style;
+          cell.style = { ...cell.style, ...colConfig.style };
         }
       }
     }
