@@ -191,3 +191,16 @@ export interface ColumnConfig<T = Record<string, unknown>> {
   /** Cell style for data cells in this column */
   style?: CellStyle;
 }
+
+/**
+ * Rich cell value with optional formula and style.
+ * Use this when you need to set value, formula, or style for individual cells.
+ */
+export interface RichCellValue {
+  /** Cell value */
+  value?: CellValue;
+  /** Formula (without leading '=') */
+  formula?: string;
+  /** Cell style */
+  style?: CellStyle;
+}

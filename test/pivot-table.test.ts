@@ -6,6 +6,7 @@ describe('PivotTable', () => {
 
   beforeEach(() => {
     wb = Workbook.create();
+    wb.addSheet('Sheet1');
     const sheet = wb.sheet('Sheet1');
 
     // Create sample sales data

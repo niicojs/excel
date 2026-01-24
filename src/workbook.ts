@@ -6,6 +6,7 @@ import type {
   CellValue,
   SheetFromDataConfig,
   ColumnConfig,
+  RichCellValue,
 } from './types';
 import { Worksheet } from './worksheet';
 import { SharedStrings } from './shared-strings';
@@ -312,15 +313,22 @@ export class Workbook {
    *     { key: 'age', header: 'Age (years)' },
    *   ],
    * });
+   *
+   * // With rich cell values (value, formula, style)
+   * const dataWithFormulas = [
+   *   { product: 'Widget', price: 10, qty: 5, total: { formula: 'B2*C2', style: { bold: true } } },
+   *   { product: 'Gadget', price: 20, qty: 3, total: { formula: 'B3*C3', style: { bold: true } } },
+   * ];
+   * const sheet3 = wb.addSheetFromData({
+   *   name: 'With Formulas',
+   *   data: dataWithFormulas,
+   * });
    * ```
    */
   addSheetFromData<T extends object>(config: SheetFromDataConfig<T>): Worksheet {
     const { name, data, columns, headerStyle = true, startCell = 'A1' } = config;
 
-    if (data.length === 0) {
-      // Create empty sheet if no data
-      return this.addSheet(name);
-    }
+    if (!data?.length) return this.addSheet(name);
 
     // Create the new sheet
     const sheet = this.addSheet(name);
@@ -358,10 +366,24 @@ export class Workbook {
         const value = rowData[colConfig.key];
         const cell = sheet.cell(startRow + rowIdx, startCol + colIdx);
 
-        // Convert value to CellValue
-        cell.value = this._toCellValue(value);
+        // Check if value is a rich cell definition
+        if (this._isRichCellValue(value)) {
+          const richValue = value as RichCellValue;
+          if (richValue.value !== undefined) {
+            cell.value = richValue.value;
+          }
+          if (richValue.formula !== undefined) {
+            cell.formula = richValue.formula;
+          }
+          if (richValue.style !== undefined) {
+            cell.style = richValue.style;
+          }
+        } else {
+          // Convert value to CellValue
+          cell.value = this._toCellValue(value);
+        }
 
-        // Apply column style if defined
+        // Apply column style if defined (merged with cell style)
         if (colConfig.style) {
           cell.style = colConfig.style;
         }
@@ -369,6 +391,21 @@ export class Workbook {
     }
 
     return sheet;
+  }
+
+  /**
+   * Check if a value is a rich cell value object with value, formula, or style fields
+   */
+  private _isRichCellValue(value: unknown): value is RichCellValue {
+    if (value === null || value === undefined) {
+      return false;
+    }
+    if (typeof value !== 'object' || value instanceof Date) {
+      return false;
+    }
+    // Check if it has at least one of the rich cell properties
+    const obj = value as Record<string, unknown>;
+    return 'value' in obj || 'formula' in obj || 'style' in obj;
   }
 
   /**

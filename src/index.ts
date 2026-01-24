@@ -28,6 +28,7 @@ export type {
   // Sheet from data types
   SheetFromDataConfig,
   ColumnConfig,
+  RichCellValue,
 } from './types';
 
 // Utility exports

@@ -15,22 +15,24 @@ describe('Workbook', () => {
   });
 
   describe('create', () => {
-    it('creates a new workbook with default sheet', () => {
+    it('creates a new empty workbook', () => {
       const wb = Workbook.create();
-      expect(wb.sheetCount).toBe(1);
-      expect(wb.sheetNames).toEqual(['Sheet1']);
+      expect(wb.sheetCount).toBe(0);
+      expect(wb.sheetNames).toEqual([]);
     });
 
-    it('allows accessing the default sheet', () => {
+    it('allows adding sheets to an empty workbook', () => {
       const wb = Workbook.create();
-      const sheet = wb.sheet(0);
-      expect(sheet.name).toBe('Sheet1');
+      wb.addSheet('MySheet');
+      expect(wb.sheetCount).toBe(1);
+      expect(wb.sheetNames).toEqual(['MySheet']);
     });
   });
 
   describe('sheet operations', () => {
     it('adds a new sheet', () => {
       const wb = Workbook.create();
+      wb.addSheet('Sheet1');
       wb.addSheet('Sheet2');
       expect(wb.sheetCount).toBe(2);
       expect(wb.sheetNames).toEqual(['Sheet1', 'Sheet2']);
@@ -38,17 +40,20 @@ describe('Workbook', () => {
 
     it('adds a sheet at a specific index', () => {
       const wb = Workbook.create();
+      wb.addSheet('Sheet1');
       wb.addSheet('First', 0);
       expect(wb.sheetNames).toEqual(['First', 'Sheet1']);
     });
 
     it('throws when adding a duplicate sheet name', () => {
       const wb = Workbook.create();
+      wb.addSheet('Sheet1');
       expect(() => wb.addSheet('Sheet1')).toThrow('Sheet already exists');
     });
 
     it('deletes a sheet by name', () => {
       const wb = Workbook.create();
+      wb.addSheet('Sheet1');
       wb.addSheet('Sheet2');
       wb.deleteSheet('Sheet1');
       expect(wb.sheetNames).toEqual(['Sheet2']);
@@ -56,6 +61,7 @@ describe('Workbook', () => {
 
     it('deletes a sheet by index', () => {
       const wb = Workbook.create();
+      wb.addSheet('Sheet1');
       wb.addSheet('Sheet2');
       wb.deleteSheet(0);
       expect(wb.sheetNames).toEqual(['Sheet2']);
@@ -63,17 +69,20 @@ describe('Workbook', () => {
 
     it('throws when deleting the last sheet', () => {
       const wb = Workbook.create();
+      wb.addSheet('Sheet1');
       expect(() => wb.deleteSheet(0)).toThrow('Cannot delete the last sheet');
     });
 
     it('renames a sheet', () => {
       const wb = Workbook.create();
+      wb.addSheet('Sheet1');
       wb.renameSheet('Sheet1', 'Renamed');
       expect(wb.sheetNames).toEqual(['Renamed']);
     });
 
     it('copies a sheet', () => {
       const wb = Workbook.create();
+      wb.addSheet('Sheet1');
       const original = wb.sheet('Sheet1');
       original.cell('A1').value = 'Hello';
       original.cell('B1').value = 42;
@@ -87,6 +96,7 @@ describe('Workbook', () => {
   describe('cell operations', () => {
     it('reads and writes string values', () => {
       const wb = Workbook.create();
+      wb.addSheet('Sheet1');
       const sheet = wb.sheet(0);
 
       sheet.cell('A1').value = 'Hello';
@@ -96,6 +106,7 @@ describe('Workbook', () => {
 
     it('reads and writes number values', () => {
       const wb = Workbook.create();
+      wb.addSheet('Sheet1');
       const sheet = wb.sheet(0);
 
       sheet.cell('A1').value = 42.5;
@@ -105,6 +116,7 @@ describe('Workbook', () => {
 
     it('reads and writes boolean values', () => {
       const wb = Workbook.create();
+      wb.addSheet('Sheet1');
       const sheet = wb.sheet(0);
 
       sheet.cell('A1').value = true;
@@ -117,6 +129,7 @@ describe('Workbook', () => {
 
     it('reads and writes date values', () => {
       const wb = Workbook.create();
+      wb.addSheet('Sheet1');
       const sheet = wb.sheet(0);
       const date = new Date('2024-01-15');
 
@@ -131,6 +144,7 @@ describe('Workbook', () => {
 
     it('reads and writes formulas', () => {
       const wb = Workbook.create();
+      wb.addSheet('Sheet1');
       const sheet = wb.sheet(0);
 
       sheet.cell('A1').value = 10;
@@ -142,6 +156,7 @@ describe('Workbook', () => {
 
     it('handles null values', () => {
       const wb = Workbook.create();
+      wb.addSheet('Sheet1');
       const sheet = wb.sheet(0);
 
       expect(sheet.cell('A1').value).toBeNull();
@@ -150,6 +165,7 @@ describe('Workbook', () => {
 
     it('handles cell addressing by row/col', () => {
       const wb = Workbook.create();
+      wb.addSheet('Sheet1');
       const sheet = wb.sheet(0);
 
       sheet.cell(0, 0).value = 'A1';
@@ -163,6 +179,7 @@ describe('Workbook', () => {
   describe('range operations', () => {
     it('reads values from a range', () => {
       const wb = Workbook.create();
+      wb.addSheet('Sheet1');
       const sheet = wb.sheet(0);
 
       sheet.cell('A1').value = 1;
@@ -179,6 +196,7 @@ describe('Workbook', () => {
 
     it('writes values to a range', () => {
       const wb = Workbook.create();
+      wb.addSheet('Sheet1');
       const sheet = wb.sheet(0);
 
       sheet.range('A1:B2').values = [
@@ -194,6 +212,7 @@ describe('Workbook', () => {
 
     it('writes a 2D array starting at a cell', () => {
       const wb = Workbook.create();
+      wb.addSheet('Sheet1');
       const sheet = wb.sheet(0);
 
       sheet.cell('B2').values = [
@@ -214,6 +233,7 @@ describe('Workbook', () => {
   describe('merged cells', () => {
     it('merges cells', () => {
       const wb = Workbook.create();
+      wb.addSheet('Sheet1');
       const sheet = wb.sheet(0);
 
       sheet.mergeCells('A1:C1');
@@ -222,6 +242,7 @@ describe('Workbook', () => {
 
     it('merges cells with two arguments', () => {
       const wb = Workbook.create();
+      wb.addSheet('Sheet1');
       const sheet = wb.sheet(0);
 
       sheet.mergeCells('A1', 'C1');
@@ -230,6 +251,7 @@ describe('Workbook', () => {
 
     it('unmerges cells', () => {
       const wb = Workbook.create();
+      wb.addSheet('Sheet1');
       const sheet = wb.sheet(0);
 
       sheet.mergeCells('A1:C1');
@@ -241,6 +263,7 @@ describe('Workbook', () => {
   describe('styles', () => {
     it('applies bold style', () => {
       const wb = Workbook.create();
+      wb.addSheet('Sheet1');
       const sheet = wb.sheet(0);
 
       sheet.cell('A1').style = { bold: true };
@@ -249,6 +272,7 @@ describe('Workbook', () => {
 
     it('applies multiple style properties', () => {
       const wb = Workbook.create();
+      wb.addSheet('Sheet1');
       const sheet = wb.sheet(0);
 
       sheet.cell('A1').style = {
@@ -265,6 +289,7 @@ describe('Workbook', () => {
 
     it('applies style to a range', () => {
       const wb = Workbook.create();
+      wb.addSheet('Sheet1');
       const sheet = wb.sheet(0);
 
       sheet.range('A1:B2').style = { bold: true };
@@ -280,6 +305,7 @@ describe('Workbook', () => {
     it('saves and loads a workbook', async () => {
       // Create and populate workbook
       const wb = Workbook.create();
+      wb.addSheet('Sheet1');
       const sheet = wb.sheet(0);
       sheet.cell('A1').value = 'Hello';
       sheet.cell('B1').value = 42;
@@ -303,6 +329,7 @@ describe('Workbook', () => {
     it('saves and loads to file', async () => {
       // Create and populate workbook
       const wb = Workbook.create();
+      wb.addSheet('Sheet1');
       const sheet = wb.sheet(0);
       sheet.cell('A1').value = 'Test';
       sheet.cell('B1').value = 123;
@@ -323,6 +350,7 @@ describe('Workbook', () => {
 
     it('preserves merged cells after save/load', async () => {
       const wb = Workbook.create();
+      wb.addSheet('Sheet1');
       const sheet = wb.sheet(0);
       sheet.cell('A1').value = 'Merged Header';
       sheet.mergeCells('A1:C1');
@@ -336,6 +364,7 @@ describe('Workbook', () => {
 
     it('preserves styles after save/load', async () => {
       const wb = Workbook.create();
+      wb.addSheet('Sheet1');
       const sheet = wb.sheet(0);
       sheet.cell('A1').value = 'Styled';
       sheet.cell('A1').style = { bold: true, italic: true };
@@ -594,12 +623,140 @@ describe('Workbook', () => {
 
     it('throws when sheet name already exists', () => {
       const wb = Workbook.create();
+      wb.addSheet('Existing');
       expect(() =>
         wb.addSheetFromData({
-          name: 'Sheet1',
+          name: 'Existing',
           data: testData,
         }),
       ).toThrow('Sheet already exists');
+    });
+
+    describe('RichCellValue support', () => {
+      it('handles rich cell values with value property', () => {
+        const wb = Workbook.create();
+        const data = [
+          { name: 'Item', price: { value: 100 } },
+          { name: 'Other', price: { value: 200 } },
+        ];
+
+        const sheet = wb.addSheetFromData({
+          name: 'RichValues',
+          data,
+        });
+
+        expect(sheet.cell('B2').value).toBe(100);
+        expect(sheet.cell('B3').value).toBe(200);
+      });
+
+      it('handles rich cell values with formula property', () => {
+        const wb = Workbook.create();
+        const data = [
+          { product: 'Widget', price: 10, qty: 5, total: { formula: 'B2*C2' } },
+          { product: 'Gadget', price: 20, qty: 3, total: { formula: 'B3*C3' } },
+        ];
+
+        const sheet = wb.addSheetFromData({
+          name: 'Formulas',
+          data,
+        });
+
+        expect(sheet.cell('D2').formula).toBe('B2*C2');
+        expect(sheet.cell('D3').formula).toBe('B3*C3');
+      });
+
+      it('handles rich cell values with style property', () => {
+        const wb = Workbook.create();
+        const data = [
+          { name: 'Important', status: { value: 'OK', style: { bold: true } } },
+          { name: 'Normal', status: { value: 'Pending', style: { italic: true } } },
+        ];
+
+        const sheet = wb.addSheetFromData({
+          name: 'Styled',
+          data,
+        });
+
+        expect(sheet.cell('B2').value).toBe('OK');
+        expect(sheet.cell('B2').style?.bold).toBe(true);
+        expect(sheet.cell('B3').value).toBe('Pending');
+        expect(sheet.cell('B3').style?.italic).toBe(true);
+      });
+
+      it('handles rich cell values with formula and style combined', () => {
+        const wb = Workbook.create();
+        const data = [{ product: 'Widget', price: 10, qty: 5, total: { formula: 'B2*C2', style: { bold: true } } }];
+
+        const sheet = wb.addSheetFromData({
+          name: 'Combined',
+          data,
+        });
+
+        expect(sheet.cell('D2').formula).toBe('B2*C2');
+        expect(sheet.cell('D2').style?.bold).toBe(true);
+      });
+
+      it('handles rich cell values with value, formula, and style', () => {
+        const wb = Workbook.create();
+        const data = [{ name: 'Test', result: { value: 50, formula: 'A2*2', style: { bold: true } } }];
+
+        const sheet = wb.addSheetFromData({
+          name: 'All',
+          data,
+        });
+
+        // When both value and formula are set, formula takes precedence for calculation
+        // but the value may be a cached result
+        expect(sheet.cell('B2').formula).toBe('A2*2');
+        expect(sheet.cell('B2').style?.bold).toBe(true);
+      });
+
+      it('does not treat regular objects as rich cell values', () => {
+        const wb = Workbook.create();
+        const data = [{ name: 'Item', details: { color: 'red', size: 'large' } }];
+
+        const sheet = wb.addSheetFromData({
+          name: 'Objects',
+          data,
+        });
+
+        // Regular objects without value/formula/style should be converted to string
+        const cellValue = sheet.cell('B2').value;
+        expect(typeof cellValue).toBe('string');
+      });
+
+      it('handles Date values in rich cells', () => {
+        const wb = Workbook.create();
+        const testDate = new Date('2024-06-15');
+        const data = [{ name: 'Event', date: { value: testDate, style: { bold: true } } }];
+
+        const sheet = wb.addSheetFromData({
+          name: 'Dates',
+          data,
+        });
+
+        const cellValue = sheet.cell('B2').value;
+        expect(cellValue).toBeInstanceOf(Date);
+        expect((cellValue as Date).getFullYear()).toBe(2024);
+        expect(sheet.cell('B2').style?.bold).toBe(true);
+      });
+
+      it('preserves rich cell values through save and load', async () => {
+        const wb = Workbook.create();
+        const data = [{ product: 'Widget', price: 10, qty: 5, total: { formula: 'B2*C2', style: { bold: true } } }];
+
+        wb.addSheetFromData({
+          name: 'SaveLoad',
+          data,
+        });
+
+        const buffer = await wb.toBuffer();
+        const loaded = await Workbook.fromBuffer(buffer);
+        const sheet = loaded.sheet('SaveLoad');
+
+        expect(sheet.cell('D2').formula).toBe('B2*C2');
+        expect(sheet.cell('D2').style?.bold).toBe(true);
+      });
     });
   });
 });

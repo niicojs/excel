@@ -4,7 +4,7 @@
  * Run with: bun examples/sheet-from-objects.ts
  */
 import { Workbook } from '../src';
-import type { ColumnConfig } from '../src';
+import type { ColumnConfig, RichCellValue } from '../src';
 
 async function main() {
   const wb = Workbook.create();
@@ -118,6 +118,144 @@ async function main() {
   });
 
   console.log('Created sheet "Products" with mixed data types');
+
+  // ====================================================================
+  // RichCellValue - Adding formulas and styles to individual cells
+  // ====================================================================
+
+  // RichCellValue allows you to set value, formula, and/or style for individual cells
+  interface OrderLine {
+    product: string;
+    unitPrice: number;
+    quantity: number;
+    total: RichCellValue; // Use RichCellValue for cells with formulas/styles
+  }
+
+  const orderLines: OrderLine[] = [
+    {
+      product: 'Widget Pro',
+      unitPrice: 29.99,
+      quantity: 10,
+      total: { formula: 'B2*C2', style: { numberFormat: '$#,##0.00' } },
+    },
+    {
+      product: 'Gadget Basic',
+      unitPrice: 14.99,
+      quantity: 25,
+      total: { formula: 'B3*C3', style: { numberFormat: '$#,##0.00' } },
+    },
+    {
+      product: 'Super Gizmo',
+      unitPrice: 49.99,
+      quantity: 5,
+      total: { formula: 'B4*C4', style: { numberFormat: '$#,##0.00' } },
+    },
+  ];
+
+  wb.addSheetFromData({
+    name: 'Order with Formulas',
+    data: orderLines,
+    columns: [
+      { key: 'product', header: 'Product' },
+      { key: 'unitPrice', header: 'Unit Price', style: { numberFormat: '$#,##0.00' } },
+      { key: 'quantity', header: 'Qty' },
+      { key: 'total', header: 'Total' },
+    ],
+  });
+
+  console.log('Created sheet "Order with Formulas" with RichCellValue formulas');
+
+  // RichCellValue with styles for conditional formatting-like effects
+  interface StatusReport {
+    task: string;
+    status: RichCellValue;
+    priority: RichCellValue;
+  }
+
+  const statusReport: StatusReport[] = [
+    {
+      task: 'Complete documentation',
+      status: { value: 'Done', style: { bold: true } },
+      priority: { value: 'High', style: { bold: true, italic: true } },
+    },
+    {
+      task: 'Fix critical bug',
+      status: { value: 'In Progress', style: { italic: true } },
+      priority: { value: 'Critical', style: { bold: true } },
+    },
+    {
+      task: 'Review PRs',
+      status: { value: 'Pending', style: {} },
+      priority: { value: 'Medium', style: { italic: true } },
+    },
+  ];
+
+  wb.addSheetFromData({
+    name: 'Status Report',
+    data: statusReport,
+  });
+
+  console.log('Created sheet "Status Report" with styled status cells');
+
+  // RichCellValue with formulas and grand total
+  interface SalesData {
+    region: string;
+    q1: number;
+    q2: number;
+    q3: number;
+    q4: number;
+    yearTotal: RichCellValue;
+  }
+
+  const salesData: SalesData[] = [
+    {
+      region: 'North',
+      q1: 10000,
+      q2: 12000,
+      q3: 11000,
+      q4: 15000,
+      yearTotal: { formula: 'SUM(B2:E2)', style: { bold: true, numberFormat: '$#,##0' } },
+    },
+    {
+      region: 'South',
+      q1: 8000,
+      q2: 9500,
+      q3: 10500,
+      q4: 12000,
+      yearTotal: { formula: 'SUM(B3:E3)', style: { bold: true, numberFormat: '$#,##0' } },
+    },
+    {
+      region: 'East',
+      q1: 15000,
+      q2: 14000,
+      q3: 16000,
+      q4: 18000,
+      yearTotal: { formula: 'SUM(B4:E4)', style: { bold: true, numberFormat: '$#,##0' } },
+    },
+    {
+      region: 'West',
+      q1: 12000,
+      q2: 13000,
+      q3: 11500,
+      q4: 14500,
+      yearTotal: { formula: 'SUM(B5:E5)', style: { bold: true, numberFormat: '$#,##0' } },
+    },
+  ];
+
+  wb.addSheetFromData({
+    name: 'Sales Summary',
+    data: salesData,
+    columns: [
+      { key: 'region', header: 'Region' },
+      { key: 'q1', header: 'Q1', style: { numberFormat: '$#,##0' } },
+      { key: 'q2', header: 'Q2', style: { numberFormat: '$#,##0' } },
+      { key: 'q3', header: 'Q3', style: { numberFormat: '$#,##0' } },
+      { key: 'q4', header: 'Q4', style: { numberFormat: '$#,##0' } },
+      { key: 'yearTotal', header: 'Year Total' },
+    ],
+  });
+
+  console.log('Created sheet "Sales Summary" with SUM formulas and formatting');
 
   // Save the workbook
   await wb.toFile('examples/output/sheet-from-objects.xlsx');
