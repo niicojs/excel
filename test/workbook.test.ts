@@ -759,4 +759,307 @@ describe('Workbook', () => {
       });
     });
   });
+
+  describe('toJson', () => {
+    it('converts sheet data to array of objects using first row as headers', () => {
+      const wb = Workbook.create();
+      wb.addSheet('Data');
+      const sheet = wb.sheet('Data');
+
+      // Set up headers
+      sheet.cell('A1').value = 'name';
+      sheet.cell('B1').value = 'age';
+      sheet.cell('C1').value = 'city';
+
+      // Set up data
+      sheet.cell('A2').value = 'Alice';
+      sheet.cell('B2').value = 30;
+      sheet.cell('C2').value = 'Paris';
+
+      sheet.cell('A3').value = 'Bob';
+      sheet.cell('B3').value = 25;
+      sheet.cell('C3').value = 'London';
+
+      const result = sheet.toJson();
+
+      expect(result).toEqual([
+        { name: 'Alice', age: 30, city: 'Paris' },
+        { name: 'Bob', age: 25, city: 'London' },
+      ]);
+    });
+
+    it('uses provided field names instead of first row', () => {
+      const wb = Workbook.create();
+      wb.addSheet('Data');
+      const sheet = wb.sheet('Data');
+
+      // Data without headers
+      sheet.cell('A1').value = 'Alice';
+      sheet.cell('B1').value = 30;
+      sheet.cell('C1').value = 'Paris';
+
+      sheet.cell('A2').value = 'Bob';
+      sheet.cell('B2').value = 25;
+      sheet.cell('C2').value = 'London';
+
+      const result = sheet.toJson({ fields: ['name', 'age', 'city'] });
+
+      expect(result).toEqual([
+        { name: 'Alice', age: 30, city: 'Paris' },
+        { name: 'Bob', age: 25, city: 'London' },
+      ]);
+    });
+
+    it('handles startRow option with headers', () => {
+      const wb = Workbook.create();
+      wb.addSheet('Data');
+      const sheet = wb.sheet('Data');
+
+      // Title row (to be skipped)
+      sheet.cell('A1').value = 'Employee Report';
+
+      // Headers at row 2 (index 1)
+      sheet.cell('A2').value = 'name';
+      sheet.cell('B2').value = 'salary';
+
+      // Data
+      sheet.cell('A3').value = 'Alice';
+      sheet.cell('B3').value = 50000;
+
+      const result = sheet.toJson({ startRow: 1 });
+
+      expect(result).toEqual([{ name: 'Alice', salary: 50000 }]);
+    });
+
+    it('handles startRow option with custom fields', () => {
+      const wb = Workbook.create();
+      wb.addSheet('Data');
+      const sheet = wb.sheet('Data');
+
+      // Skip first two rows
+      sheet.cell('A1').value = 'Title';
+      sheet.cell('A2').value = 'Subtitle';
+
+      // Data starts at row 3 (index 2)
+      sheet.cell('A3').value = 'Alice';
+      sheet.cell('B3').value = 30;
+
+      const result = sheet.toJson({ fields: ['name', 'age'], startRow: 2 });
+
+      expect(result).toEqual([{ name: 'Alice', age: 30 }]);
+    });
+
+    it('handles startCol option', () => {
+      const wb = Workbook.create();
+      wb.addSheet('Data');
+      const sheet = wb.sheet('Data');
+
+      // Data starts at column B (index 1)
+      sheet.cell('A1').value = 'Row Number';
+      sheet.cell('B1').value = 'name';
+      sheet.cell('C1').value = 'age';
+
+      sheet.cell('A2').value = 1;
+      sheet.cell('B2').value = 'Alice';
+      sheet.cell('C2').value = 30;
+
+      const result = sheet.toJson({ startCol: 1 });
+
+      expect(result).toEqual([{ name: 'Alice', age: 30 }]);
+    });
+
+    it('handles endRow option', () => {
+      const wb = Workbook.create();
+      wb.addSheet('Data');
+      const sheet = wb.sheet('Data');
+
+      sheet.cell('A1').value = 'name';
+      sheet.cell('A2').value = 'Alice';
+      sheet.cell('A3').value = 'Bob';
+      sheet.cell('A4').value = 'Charlie';
+
+      const result = sheet.toJson({ endRow: 2 });
+
+      expect(result).toEqual([{ name: 'Alice' }, { name: 'Bob' }]);
+    });
+
+    it('handles endCol option', () => {
+      const wb = Workbook.create();
+      wb.addSheet('Data');
+      const sheet = wb.sheet('Data');
+
+      sheet.cell('A1').value = 'name';
+      sheet.cell('B1').value = 'age';
+      sheet.cell('C1').value = 'city';
+
+      sheet.cell('A2').value = 'Alice';
+      sheet.cell('B2').value = 30;
+      sheet.cell('C2').value = 'Paris';
+
+      const result = sheet.toJson({ endCol: 1 });
+
+      expect(result).toEqual([{ name: 'Alice', age: 30 }]);
+    });
+
+    it('stops on empty row by default', () => {
+      const wb = Workbook.create();
+      wb.addSheet('Data');
+      const sheet = wb.sheet('Data');
+
+      sheet.cell('A1').value = 'name';
+      sheet.cell('A2').value = 'Alice';
+      sheet.cell('A3').value = 'Bob';
+      // Row 4 is empty
+      sheet.cell('A5').value = 'Charlie';
+
+      const result = sheet.toJson();
+
+      expect(result).toEqual([{ name: 'Alice' }, { name: 'Bob' }]);
+    });
+
+    it('continues past empty rows when stopOnEmptyRow is false', () => {
+      const wb = Workbook.create();
+      wb.addSheet('Data');
+      const sheet = wb.sheet('Data');
+
+      sheet.cell('A1').value = 'name';
+      sheet.cell('A2').value = 'Alice';
+      // Row 3 is empty
+      sheet.cell('A4').value = 'Bob';
+
+      const result = sheet.toJson({ stopOnEmptyRow: false, endRow: 3 });
+
+      expect(result).toEqual([{ name: 'Alice' }, { name: null }, { name: 'Bob' }]);
+    });
+
+    it('returns empty array for empty sheet', () => {
+      const wb = Workbook.create();
+      wb.addSheet('Empty');
+      const sheet = wb.sheet('Empty');
+
+      const result = sheet.toJson();
+
+      expect(result).toEqual([]);
+    });
+
+    it('handles boolean values', () => {
+      const wb = Workbook.create();
+      wb.addSheet('Data');
+      const sheet = wb.sheet('Data');
+
+      sheet.cell('A1').value = 'active';
+      sheet.cell('A2').value = true;
+      sheet.cell('A3').value = false;
+
+      const result = sheet.toJson();
+
+      expect(result).toEqual([{ active: true }, { active: false }]);
+    });
+
+    it('handles date values', () => {
+      const wb = Workbook.create();
+      wb.addSheet('Data');
+      const sheet = wb.sheet('Data');
+
+      const testDate = new Date('2024-06-15');
+      sheet.cell('A1').value = 'date';
+      sheet.cell('A2').value = testDate;
+
+      const result = sheet.toJson();
+
+      expect(result[0].date).toBeInstanceOf(Date);
+      expect((result[0].date as Date).getFullYear()).toBe(2024);
+    });
+
+    it('handles null/empty cells', () => {
+      const wb = Workbook.create();
+      wb.addSheet('Data');
+      const sheet = wb.sheet('Data');
+
+      sheet.cell('A1').value = 'name';
+      sheet.cell('B1').value = 'age';
+      sheet.cell('A2').value = 'Alice';
+      // B2 is empty
+
+      const result = sheet.toJson();
+
+      expect(result).toEqual([{ name: 'Alice', age: null }]);
+    });
+
+    it('generates column names for empty headers', () => {
+      const wb = Workbook.create();
+      wb.addSheet('Data');
+      const sheet = wb.sheet('Data');
+
+      sheet.cell('A1').value = 'name';
+      // B1 is empty
+      sheet.cell('C1').value = 'city';
+
+      sheet.cell('A2').value = 'Alice';
+      sheet.cell('B2').value = 30;
+      sheet.cell('C2').value = 'Paris';
+
+      const result = sheet.toJson();
+
+      expect(result).toEqual([{ name: 'Alice', column1: 30, city: 'Paris' }]);
+    });
+
+    it('works with typed generic', () => {
+      const wb = Workbook.create();
+      wb.addSheet('Data');
+      const sheet = wb.sheet('Data');
+
+      interface Person {
+        name: string | null;
+        age: number | null;
+      }
+
+      sheet.cell('A1').value = 'name';
+      sheet.cell('B1').value = 'age';
+      sheet.cell('A2').value = 'Alice';
+      sheet.cell('B2').value = 30;
+
+      const result = sheet.toJson<Person>();
+
+      expect(result[0].name).toBe('Alice');
+      expect(result[0].age).toBe(30);
+    });
+
+    it('preserves data through addSheetFromData and toJson roundtrip', () => {
+      const wb = Workbook.create();
+
+      const originalData = [
+        { name: 'Alice', age: 30, city: 'Paris' },
+        { name: 'Bob', age: 25, city: 'London' },
+      ];
+
+      const sheet = wb.addSheetFromData({
+        name: 'People',
+        data: originalData,
+      });
+
+      const result = sheet.toJson();
+
+      expect(result).toEqual(originalData);
+    });
+
+    it('preserves data through save/load cycle', async () => {
+      const wb = Workbook.create();
+      wb.addSheet('Data');
+      const sheet = wb.sheet('Data');
+
+      sheet.cell('A1').value = 'name';
+      sheet.cell('B1').value = 'age';
+      sheet.cell('A2').value = 'Alice';
+      sheet.cell('B2').value = 30;
+
+      const buffer = await wb.toBuffer();
+      const loaded = await Workbook.fromBuffer(buffer);
+      const loadedSheet = loaded.sheet('Data');
+
+      const result = loadedSheet.toJson();
+
+      expect(result).toEqual([{ name: 'Alice', age: 30 }]);
+    });
+  });
 });

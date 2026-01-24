@@ -10,6 +10,8 @@ A TypeScript library for Excel/OpenXML manipulation with maximum format preserva
 - Cell styles (fonts, fills, borders, alignment)
 - Merged cells
 - Sheet operations (add, delete, rename, copy)
+- Create sheets from arrays of objects (`addSheetFromData`)
+- Convert sheets to JSON arrays (`toJson`)
 - Create new workbooks from scratch
 - TypeScript-first with full type definitions
 
@@ -28,6 +30,7 @@ import { Workbook } from '@niicojs/excel';
 
 // Create a new workbook
 const wb = Workbook.create();
+wb.addSheet('Sheet1');
 const sheet = wb.sheet('Sheet1');
 
 // Write data
@@ -146,7 +149,7 @@ wb.addSheet('Data');
 wb.addSheet('Summary', 0); // Insert at index 0
 
 // Get sheet names
-console.log(wb.sheetNames); // ['Summary', 'Sheet1', 'Data']
+console.log(wb.sheetNames); // ['Summary', 'Data']
 
 // Access sheets
 const sheet = wb.sheet('Data'); // By name
@@ -160,6 +163,115 @@ wb.copySheet('RawData', 'RawData_Backup');
 
 // Delete sheet
 wb.deleteSheet('Summary');
+```
+
+## Creating Sheets from Data
+
+Create sheets directly from arrays of objects with `addSheetFromData`:
+
+```typescript
+const wb = Workbook.create();
+
+// Simple usage - object keys become column headers
+const employees = [
+  { name: 'Alice', age: 30, city: 'Paris' },
+  { name: 'Bob', age: 25, city: 'London' },
+];
+
+wb.addSheetFromData({
+  name: 'Employees',
+  data: employees,
+});
+
+// Custom column configuration
+wb.addSheetFromData({
+  name: 'Custom',
+  data: employees,
+  columns: [
+    { key: 'name', header: 'Full Name' },
+    { key: 'age', header: 'Age (years)' },
+    { key: 'city', header: 'Location', style: { bold: true } },
+  ],
+});
+
+// With formulas and styles using RichCellValue
+const orderLines = [
+  { product: 'Widget', price: 10, qty: 5, total: { formula: 'B2*C2', style: { bold: true } } },
+  { product: 'Gadget', price: 20, qty: 3, total: { formula: 'B3*C3', style: { bold: true } } },
+];
+
+wb.addSheetFromData({
+  name: 'Orders',
+  data: orderLines,
+});
+
+// Other options
+wb.addSheetFromData({
+  name: 'Options',
+  data: employees,
+  headerStyle: false, // Don't bold headers
+  startCell: 'B3', // Start at B3 instead of A1
+});
+```
+
+## Converting Sheets to JSON
+
+Convert sheet data back to arrays of objects with `toJson`:
+
+```typescript
+const sheet = wb.sheet('Data');
+
+// Using first row as headers
+const data = sheet.toJson();
+// [{ name: 'Alice', age: 30 }, { name: 'Bob', age: 25 }]
+
+// Using custom field names (first row is data, not headers)
+const data = sheet.toJson({
+  fields: ['name', 'age', 'city'],
+});
+
+// With TypeScript generics
+interface Person {
+  name: string | null;
+  age: number | null;
+}
+const people = sheet.toJson<Person>();
+
+// Starting from a specific position
+const data = sheet.toJson({
+  startRow: 2, // Skip first 2 rows (0-based)
+  startCol: 1, // Start from column B
+});
+
+// Limiting the range
+const data = sheet.toJson({
+  endRow: 10, // Stop at row 11 (0-based, inclusive)
+  endCol: 3, // Only read columns A-D
+});
+
+// Continue past empty rows
+const data = sheet.toJson({
+  stopOnEmptyRow: false, // Default is true
+});
+```
+
+### Roundtrip Example
+
+```typescript
+// Create from objects
+const originalData = [
+  { name: 'Alice', age: 30 },
+  { name: 'Bob', age: 25 },
+];
+
+const sheet = wb.addSheetFromData({
+  name: 'People',
+  data: originalData,
+});
+
+// Read back as objects
+const readData = sheet.toJson();
+// readData equals originalData
 ```
 
 ## Saving
@@ -187,6 +299,38 @@ type CellType = 'number' | 'string' | 'boolean' | 'date' | 'error' | 'empty';
 
 // Border types
 type BorderType = 'thin' | 'medium' | 'thick' | 'double' | 'dotted' | 'dashed';
+
+// Configuration for addSheetFromData
+interface SheetFromDataConfig<T> {
+  name: string;
+  data: T[];
+  columns?: ColumnConfig<T>[];
+  headerStyle?: boolean; // Default: true
+  startCell?: string; // Default: 'A1'
+}
+
+interface ColumnConfig<T> {
+  key: keyof T;
+  header?: string;
+  style?: CellStyle;
+}
+
+// Rich cell value for formulas/styles in data
+interface RichCellValue {
+  value?: CellValue;
+  formula?: string;
+  style?: CellStyle;
+}
+
+// Configuration for toJson
+interface SheetToJsonConfig {
+  fields?: string[];
+  startRow?: number;
+  startCol?: number;
+  endRow?: number;
+  endCol?: number;
+  stopOnEmptyRow?: boolean; // Default: true
+}
 ```
 
 ## Format Preservation

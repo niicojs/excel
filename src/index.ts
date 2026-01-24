@@ -29,6 +29,8 @@ export type {
   SheetFromDataConfig,
   ColumnConfig,
   RichCellValue,
+  // Sheet to JSON types
+  SheetToJsonConfig,
 } from './types';
 
 // Utility exports

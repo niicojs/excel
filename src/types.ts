@@ -204,3 +204,42 @@ export interface RichCellValue {
   /** Cell style */
   style?: CellStyle;
 }
+
+/**
+ * Configuration for converting a sheet to JSON objects.
+ */
+export interface SheetToJsonConfig {
+  /**
+   * Field names to use for each column.
+   * If provided, the first row of data starts at row 1 (or startRow).
+   * If not provided, the first row is used as field names.
+   */
+  fields?: string[];
+
+  /**
+   * Starting row (0-based). Defaults to 0.
+   * If fields are not provided, this row contains the headers.
+   * If fields are provided, this is the first data row.
+   */
+  startRow?: number;
+
+  /**
+   * Starting column (0-based). Defaults to 0.
+   */
+  startCol?: number;
+
+  /**
+   * Ending row (0-based, inclusive). Defaults to the last row with data.
+   */
+  endRow?: number;
+
+  /**
+   * Ending column (0-based, inclusive). Defaults to the last column with data.
+   */
+  endCol?: number;
+
+  /**
+   * If true, stop reading when an empty row is encountered. Defaults to true.
+   */
+  stopOnEmptyRow?: boolean;
+}

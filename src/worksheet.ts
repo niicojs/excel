@@ -1,4 +1,4 @@
-import type { CellData, RangeAddress } from './types';
+import type { CellData, RangeAddress, SheetToJsonConfig, CellValue } from './types';
 import type { Workbook } from './workbook';
 import { Cell, parseCellRef } from './cell';
 import { Range } from './range';
@@ -278,6 +278,117 @@ export class Worksheet {
    */
   get cells(): Map<string, Cell> {
     return this._cells;
+  }
+
+  /**
+   * Convert sheet data to an array of JSON objects.
+   *
+   * @param config - Configuration options
+   * @returns Array of objects where keys are field names and values are cell values
+   *
+   * @example
+   * ```typescript
+   * // Using first row as headers
+   * const data = sheet.toJson();
+   *
+   * // Using custom field names
+   * const data = sheet.toJson({ fields: ['name', 'age', 'city'] });
+   *
+   * // Starting from a specific row/column
+   * const data = sheet.toJson({ startRow: 2, startCol: 1 });
+   * ```
+   */
+  toJson<T = Record<string, CellValue>>(config: SheetToJsonConfig = {}): T[] {
+    const { fields, startRow = 0, startCol = 0, endRow, endCol, stopOnEmptyRow = true } = config;
+
+    // Get the bounds of data in the sheet
+    const bounds = this._getDataBounds();
+    if (!bounds) {
+      return [];
+    }
+
+    const effectiveEndRow = endRow ?? bounds.maxRow;
+    const effectiveEndCol = endCol ?? bounds.maxCol;
+
+    // Determine field names
+    let fieldNames: string[];
+    let dataStartRow: number;
+
+    if (fields) {
+      // Use provided field names, data starts at startRow
+      fieldNames = fields;
+      dataStartRow = startRow;
+    } else {
+      // Use first row as headers
+      fieldNames = [];
+      for (let col = startCol; col <= effectiveEndCol; col++) {
+        const cell = this._cells.get(toAddress(startRow, col));
+        const value = cell?.value;
+        fieldNames.push(value != null ? String(value) : `column${col}`);
+      }
+      dataStartRow = startRow + 1;
+    }
+
+    // Read data rows
+    const result: T[] = [];
+
+    for (let row = dataStartRow; row <= effectiveEndRow; row++) {
+      const obj: Record<string, CellValue> = {};
+      let hasData = false;
+
+      for (let colOffset = 0; colOffset < fieldNames.length; colOffset++) {
+        const col = startCol + colOffset;
+        const cell = this._cells.get(toAddress(row, col));
+        const value = cell?.value ?? null;
+
+        if (value !== null) {
+          hasData = true;
+        }
+
+        const fieldName = fieldNames[colOffset];
+        if (fieldName) {
+          obj[fieldName] = value;
+        }
+      }
+
+      // Stop on empty row if configured
+      if (stopOnEmptyRow && !hasData) {
+        break;
+      }
+
+      result.push(obj as T);
+    }
+
+    return result;
+  }
+
+  /**
+   * Get the bounds of data in the sheet (min/max row and column with data)
+   */
+  private _getDataBounds(): { minRow: number; maxRow: number; minCol: number; maxCol: number } | null {
+    if (this._cells.size === 0) {
+      return null;
+    }
+
+    let minRow = Infinity;
+    let maxRow = -Infinity;
+    let minCol = Infinity;
+    let maxCol = -Infinity;
+
+    for (const cell of this._cells.values()) {
+      if (cell.value !== null) {
+        minRow = Math.min(minRow, cell.row);
+        maxRow = Math.max(maxRow, cell.row);
+        minCol = Math.min(minCol, cell.col);
+        maxCol = Math.max(maxCol, cell.col);
+      }
+    }
+
+    if (minRow === Infinity) {
+      return null;
+    }
+
+    return { minRow, maxRow, minCol, maxCol };
   }
 
   /**
