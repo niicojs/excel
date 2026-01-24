@@ -8,7 +8,7 @@ import { Workbook } from '../src';
 async function main() {
   // Create a new workbook
   const wb = Workbook.create();
-  const sheet = wb.sheet('Sheet1');
+  const sheet = wb.addSheet('example');
 
   // Write some basic values
   sheet.cell('A1').value = 'Name';

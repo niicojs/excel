@@ -7,7 +7,7 @@ import { Workbook } from '../src';
 
 async function main() {
   const wb = Workbook.create();
-  const sheet = wb.sheet('Sheet1');
+  const sheet = wb.addSheet('example');
 
   // Create a financial calculation sheet
   sheet.cell('A1').value = 'Financial Calculator';

@@ -7,7 +7,7 @@ import { Workbook } from '../src';
 
 async function main() {
   const wb = Workbook.create();
-  const sheet = wb.sheet('Sheet1');
+  const sheet = wb.addSheet('example');
 
   // Create a styled header row
   sheet.cell('A1').value = 'Product';

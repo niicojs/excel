@@ -7,7 +7,7 @@ import { Workbook } from '../src';
 
 async function main() {
   const wb = Workbook.create();
-  const sheet = wb.sheet('Sheet1');
+  const sheet = wb.addSheet('example');
 
   // Write a 2D array starting at A1
   const salesData = [

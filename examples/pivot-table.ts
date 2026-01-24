@@ -8,8 +8,7 @@ import { Workbook } from '../src';
 async function main() {
   const wb = Workbook.create();
 
-  // Rename the data sheet
-  wb.renameSheet('Sheet1', 'SalesData');
+  wb.addSheet('SalesData');
   const sheet = wb.sheet('SalesData');
 
   // Create sample sales data

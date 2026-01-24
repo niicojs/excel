@@ -8,8 +8,7 @@ import { Workbook } from '../src';
 async function main() {
   const wb = Workbook.create();
 
-  // Rename the default sheet
-  wb.renameSheet('Sheet1', 'Summary');
+  wb.addSheet('Summary');
 
   // Add more sheets
   wb.addSheet('January');

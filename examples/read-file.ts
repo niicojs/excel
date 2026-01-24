@@ -8,7 +8,7 @@ import { Workbook } from '../src';
 async function main() {
   // First, create a sample file to read
   const wb = Workbook.create();
-  const sheet = wb.sheet('Sheet1');
+  const sheet = wb.addSheet('example');
 
   sheet.cell('A1').value = 'Employee Data';
   sheet.mergeCells('A1:D1');

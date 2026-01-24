@@ -5,7 +5,7 @@ import { Workbook } from '../src';
 
 async function main() {
   const wb = Workbook.create();
-  const sheet = wb.sheet('Sheet1');
+  const sheet = wb.addSheet('example');
 
   // Simple data: just 3 columns, 4 rows
   sheet.cell('A1').value = 'Category';
@@ -31,8 +31,8 @@ async function main() {
   // Create a simple pivot table (refreshOnLoad is true by default)
   wb.createPivotTable({
     name: 'SimplePivot',
-    source: 'Sheet1!A1:C5',
-    target: 'Sheet2!A1',
+    source: 'example!A1:C5',
+    target: 'example!A1',
   })
     .addRowField('Category')
     .addValueField('Amount', 'sum', 'Sum of Amount');

@@ -87,9 +87,6 @@ export class Workbook {
     const workbook = new Workbook();
     workbook._dirty = true;
 
-    // Add default sheet
-    workbook.addSheet('Sheet1');
-
     return workbook;
   }
 

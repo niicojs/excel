@@ -119,9 +119,6 @@ async function main() {
 
   console.log('Created sheet "Products" with mixed data types');
 
-  // Delete the default Sheet1
-  wb.deleteSheet('Sheet1');
-
   // Save the workbook
   await wb.toFile('examples/output/sheet-from-objects.xlsx');
   console.log('\nCreated: examples/output/sheet-from-objects.xlsx');
