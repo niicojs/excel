@@ -26,6 +26,10 @@ nul
 
 # Testing
 coverage
+test/fixtures/*.xlsx
+
+# Examples output
+examples/output
 
 # Misc
 .env
