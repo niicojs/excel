@@ -307,10 +307,7 @@ export class Cell {
 /**
  * Parse a cell address or row/col to get row and col indices
  */
-export const parseCellRef = (
-  rowOrAddress: number | string,
-  col?: number
-): { row: number; col: number } => {
+export const parseCellRef = (rowOrAddress: number | string, col?: number): { row: number; col: number } => {
   if (typeof rowOrAddress === 'string') {
     return parseAddress(rowOrAddress);
   }

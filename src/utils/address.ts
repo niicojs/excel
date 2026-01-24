@@ -113,9 +113,6 @@ export const normalizeRange = (range: RangeAddress): RangeAddress => {
 export const isInRange = (addr: CellAddress, range: RangeAddress): boolean => {
   const norm = normalizeRange(range);
   return (
-    addr.row >= norm.start.row &&
-    addr.row <= norm.end.row &&
-    addr.col >= norm.start.col &&
-    addr.col <= norm.end.col
+    addr.row >= norm.start.row && addr.row <= norm.end.row && addr.col >= norm.start.col && addr.col <= norm.end.col
   );
 };

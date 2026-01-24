@@ -12,7 +12,6 @@
         "@types/node": "^25.0.10",
         "bunchee": "^6.9.4",
         "tsdx": "latest",
-        "tsx": "^4.21.0",
         "typescript": "^5.7.2",
         "vitest": "^4.0.18",
       },

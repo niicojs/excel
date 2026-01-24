@@ -118,11 +118,7 @@ export const getText = (node: XmlNode, tagName: string): string | undefined => {
 /**
  * Creates a new XML element
  */
-export const createElement = (
-  tagName: string,
-  attrs?: Record<string, string>,
-  children?: XmlNode[]
-): XmlNode => {
+export const createElement = (tagName: string, attrs?: Record<string, string>, children?: XmlNode[]): XmlNode => {
   const node: XmlNode = {
     [tagName]: children || [],
   };

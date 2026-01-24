@@ -28,7 +28,7 @@ async function main() {
   sheet.cell('B5').value = 250;
   sheet.cell('C5').value = 3;
 
-  // Create a simple pivot table
+  // Create a simple pivot table (refreshOnLoad is true by default)
   wb.createPivotTable({
     name: 'SimplePivot',
     source: 'Sheet1!A1:C5',

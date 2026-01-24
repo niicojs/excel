@@ -12,6 +12,7 @@ export class PivotCache {
   private _fields: PivotCacheField[] = [];
   private _records: CellValue[][] = [];
   private _recordCount = 0;
+  private _refreshOnLoad = true; // Default to true
 
   constructor(cacheId: number, sourceSheet: string, sourceRange: string) {
     this._cacheId = cacheId;
@@ -24,6 +25,20 @@ export class PivotCache {
    */
   get cacheId(): number {
     return this._cacheId;
+  }
+
+  /**
+   * Set refreshOnLoad option
+   */
+  set refreshOnLoad(value: boolean) {
+    this._refreshOnLoad = value;
+  }
+
+  /**
+   * Get refreshOnLoad option
+   */
+  get refreshOnLoad(): boolean {
+    return this._refreshOnLoad;
   }
 
   /**
@@ -170,24 +185,30 @@ export class PivotCache {
     const worksheetSourceNode = createElement(
       'worksheetSource',
       { ref: this._sourceRange, sheet: this._sourceSheet },
-      []
+      [],
     );
     const cacheSourceNode = createElement('cacheSource', { type: 'worksheet' }, [worksheetSourceNode]);
 
-    const definitionNode = createElement(
-      'pivotCacheDefinition',
-      {
-        'xmlns': 'http://schemas.openxmlformats.org/spreadsheetml/2006/main',
-        'xmlns:r': 'http://schemas.openxmlformats.org/officeDocument/2006/relationships',
-        'r:id': recordsRelId,
-        'refreshedBy': 'User',
-        'refreshedVersion': '8',
-        'minRefreshableVersion': '3',
-        'createdVersion': '8',
-        'recordCount': String(this._recordCount),
-      },
-      [cacheSourceNode, cacheFieldsNode]
-    );
+    // Build attributes - refreshOnLoad should come early per OOXML schema
+    const definitionAttrs: Record<string, string> = {
+      xmlns: 'http://schemas.openxmlformats.org/spreadsheetml/2006/main',
+      'xmlns:r': 'http://schemas.openxmlformats.org/officeDocument/2006/relationships',
+      'r:id': recordsRelId,
+    };
+
+    // Add refreshOnLoad early in attributes (default is true)
+    if (this._refreshOnLoad) {
+      definitionAttrs.refreshOnLoad = '1';
+    }
+
+    // Continue with remaining attributes
+    definitionAttrs.refreshedBy = 'User';
+    definitionAttrs.refreshedVersion = '8';
+    definitionAttrs.minRefreshableVersion = '3';
+    definitionAttrs.createdVersion = '8';
+    definitionAttrs.recordCount = String(this._recordCount);
+
+    const definitionNode = createElement('pivotCacheDefinition', definitionAttrs, [cacheSourceNode, cacheFieldsNode]);
 
     return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n${stringifyXml([definitionNode])}`;
   }
@@ -235,11 +256,11 @@ export class PivotCache {
     const recordsNode = createElement(
       'pivotCacheRecords',
       {
-        'xmlns': 'http://schemas.openxmlformats.org/spreadsheetml/2006/main',
+        xmlns: 'http://schemas.openxmlformats.org/spreadsheetml/2006/main',
         'xmlns:r': 'http://schemas.openxmlformats.org/officeDocument/2006/relationships',
-        'count': String(this._recordCount),
+        count: String(this._recordCount),
       },
-      recordNodes
+      recordNodes,
     );
 
     return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n${stringifyXml([recordsNode])}`;

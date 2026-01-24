@@ -215,12 +215,7 @@ export class Worksheet {
    */
   range(rangeStr: string): Range;
   range(startRow: number, startCol: number, endRow: number, endCol: number): Range;
-  range(
-    startRowOrRange: number | string,
-    startCol?: number,
-    endRow?: number,
-    endCol?: number
-  ): Range {
+  range(startRowOrRange: number | string, startCol?: number, endRow?: number, endCol?: number): Range {
     let rangeAddr: RangeAddress;
 
     if (typeof startRowOrRange === 'string') {
@@ -337,7 +332,7 @@ export class Worksheet {
         xmlns: 'http://schemas.openxmlformats.org/spreadsheetml/2006/main',
         'xmlns:r': 'http://schemas.openxmlformats.org/officeDocument/2006/relationships',
       },
-      worksheetChildren
+      worksheetChildren,
     );
 
     return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n${stringifyXml([worksheetNode])}`;

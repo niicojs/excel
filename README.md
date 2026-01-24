@@ -59,14 +59,14 @@ import { Workbook } from '@niicojs/excel';
 const wb = await Workbook.fromFile('template.xlsx');
 
 // Or load from buffer
-const buffer = await fetch('https://example.com/file.xlsx').then(r => r.arrayBuffer());
+const buffer = await fetch('https://example.com/file.xlsx').then((r) => r.arrayBuffer());
 const wb = await Workbook.fromBuffer(new Uint8Array(buffer));
 
 // Read data
 const sheet = wb.sheet('Sheet1');
-console.log(sheet.cell('A1').value);  // The cell value
+console.log(sheet.cell('A1').value); // The cell value
 console.log(sheet.cell('A1').formula); // The formula (if any)
-console.log(sheet.cell('A1').type);    // 'string' | 'number' | 'boolean' | 'date' | 'error' | 'empty'
+console.log(sheet.cell('A1').type); // 'string' | 'number' | 'boolean' | 'date' | 'error' | 'empty'
 ```
 
 ## Working with Ranges
@@ -75,7 +75,7 @@ console.log(sheet.cell('A1').type);    // 'string' | 'number' | 'boolean' | 'dat
 const sheet = wb.sheet(0);
 
 // Read a range
-const values = sheet.range('A1:C10').values;  // 2D array
+const values = sheet.range('A1:C10').values; // 2D array
 
 // Write to a range
 sheet.range('A1:B2').values = [
@@ -133,7 +133,7 @@ sheet.mergeCells('A1', 'C1');
 sheet.unmergeCells('A1:C1');
 
 // Get all merged regions
-console.log(sheet.mergedCells);  // ['A1:C3', 'D5:E10', ...]
+console.log(sheet.mergedCells); // ['A1:C3', 'D5:E10', ...]
 ```
 
 ## Sheet Operations
@@ -143,14 +143,14 @@ const wb = Workbook.create();
 
 // Add sheets
 wb.addSheet('Data');
-wb.addSheet('Summary', 0);  // Insert at index 0
+wb.addSheet('Summary', 0); // Insert at index 0
 
 // Get sheet names
-console.log(wb.sheetNames);  // ['Summary', 'Sheet1', 'Data']
+console.log(wb.sheetNames); // ['Summary', 'Sheet1', 'Data']
 
 // Access sheets
-const sheet = wb.sheet('Data');     // By name
-const sheet = wb.sheet(0);          // By index
+const sheet = wb.sheet('Data'); // By name
+const sheet = wb.sheet(0); // By index
 
 // Rename sheet
 wb.renameSheet('Data', 'RawData');

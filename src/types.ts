@@ -10,15 +10,7 @@ export interface CellError {
   error: ErrorType;
 }
 
-export type ErrorType =
-  | '#NULL!'
-  | '#DIV/0!'
-  | '#VALUE!'
-  | '#REF!'
-  | '#NAME?'
-  | '#NUM!'
-  | '#N/A'
-  | '#GETTING_DATA';
+export type ErrorType = '#NULL!' | '#DIV/0!' | '#VALUE!' | '#REF!' | '#NAME?' | '#NUM!' | '#N/A' | '#GETTING_DATA';
 
 /**
  * Discriminator for cell content type
@@ -143,6 +135,8 @@ export interface PivotTableConfig {
   source: string;
   /** Target cell where pivot table will be placed (e.g., "Sheet2!A3") */
   target: string;
+  /** Refresh the pivot table data when the file is opened (default: true) */
+  refreshOnLoad?: boolean;
 }
 
 /**

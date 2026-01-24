@@ -3,6 +3,10 @@
   "version": "0.1.0",
   "license": "MIT",
   "author": "niico",
+  "files": [
+    "dist",
+    "src"
+  ],
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -20,13 +24,6 @@
     },
     "./package.json": "./package.json"
   },
-  "files": [
-    "dist",
-    "src"
-  ],
-  "engines": {
-    "node": ">=20"
-  },
   "scripts": {
     "dev": "tsdx dev",
     "build": "tsdx build",
@@ -38,16 +35,18 @@
     "typecheck": "tsdx typecheck",
     "prepublishOnly": "bun run build"
   },
+  "dependencies": {
+    "fast-xml-parser": "^5.3.3",
+    "fflate": "^0.8.2"
+  },
   "devDependencies": {
     "@types/node": "^25.0.10",
     "bunchee": "^6.9.4",
     "tsdx": "latest",
-    "tsx": "^4.21.0",
     "typescript": "^5.7.2",
     "vitest": "^4.0.18"
   },
-  "dependencies": {
-    "fast-xml-parser": "^5.3.3",
-    "fflate": "^0.8.2"
+  "engines": {
+    "node": ">=20"
   }
 }

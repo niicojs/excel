@@ -38,7 +38,7 @@ export class PivotTable {
     targetCell: string,
     targetRow: number,
     targetCol: number,
-    pivotTableIndex: number
+    pivotTableIndex: number,
   ) {
     this._name = name;
     this._cache = cache;
@@ -192,7 +192,7 @@ export class PivotTable {
         firstDataRow: String(firstDataRow),
         firstDataCol: String(firstDataCol),
       },
-      []
+      [],
     );
     children.push(locationNode);
 
@@ -228,9 +228,7 @@ export class PivotTable {
       children.push(createElement('colItems', { count: String(colItemNodes.length) }, colItemNodes));
     } else if (this._valueFields.length > 1) {
       // If no column fields but we have multiple values, need colFields with -2 (data field indicator)
-      children.push(
-        createElement('colFields', { count: '1' }, [createElement('field', { x: '-2' }, [])])
-      );
+      children.push(createElement('colFields', { count: '1' }, [createElement('field', { x: '-2' }, [])]));
 
       // Column items for each value field
       const colItemNodes: XmlNode[] = [];
@@ -246,7 +244,7 @@ export class PivotTable {
     // Page (filter) fields
     if (this._filterFields.length > 0) {
       const pageFieldNodes = this._filterFields.map((f) =>
-        createElement('pageField', { fld: String(f.fieldIndex), hier: '-1' }, [])
+        createElement('pageField', { fld: String(f.fieldIndex), hier: '-1' }, []),
       );
       children.push(createElement('pageFields', { count: String(pageFieldNodes.length) }, pageFieldNodes));
     }
@@ -263,8 +261,8 @@ export class PivotTable {
             baseItem: '0',
             subtotal: f.aggregation || 'sum',
           },
-          []
-        )
+          [],
+        ),
       );
       children.push(createElement('dataFields', { count: String(dataFieldNodes.length) }, dataFieldNodes));
     }
@@ -281,37 +279,37 @@ export class PivotTable {
           showColStripes: '0',
           showLastColumn: '1',
         },
-        []
-      )
+        [],
+      ),
     );
 
     const pivotTableNode = createElement(
       'pivotTableDefinition',
       {
-        'xmlns': 'http://schemas.openxmlformats.org/spreadsheetml/2006/main',
+        xmlns: 'http://schemas.openxmlformats.org/spreadsheetml/2006/main',
         'xmlns:r': 'http://schemas.openxmlformats.org/officeDocument/2006/relationships',
-        'name': this._name,
-        'cacheId': String(this._cache.cacheId),
-        'applyNumberFormats': '0',
-        'applyBorderFormats': '0',
-        'applyFontFormats': '0',
-        'applyPatternFormats': '0',
-        'applyAlignmentFormats': '0',
-        'applyWidthHeightFormats': '1',
-        'dataCaption': 'Values',
-        'updatedVersion': '8',
-        'minRefreshableVersion': '3',
-        'useAutoFormatting': '1',
-        'rowGrandTotals': '1',
-        'colGrandTotals': '1',
-        'itemPrintTitles': '1',
-        'createdVersion': '8',
-        'indent': '0',
-        'outline': '1',
-        'outlineData': '1',
-        'multipleFieldFilters': '0',
+        name: this._name,
+        cacheId: String(this._cache.cacheId),
+        applyNumberFormats: '0',
+        applyBorderFormats: '0',
+        applyFontFormats: '0',
+        applyPatternFormats: '0',
+        applyAlignmentFormats: '0',
+        applyWidthHeightFormats: '1',
+        dataCaption: 'Values',
+        updatedVersion: '8',
+        minRefreshableVersion: '3',
+        useAutoFormatting: '1',
+        rowGrandTotals: '1',
+        colGrandTotals: '1',
+        itemPrintTitles: '1',
+        createdVersion: '8',
+        indent: '0',
+        outline: '1',
+        outlineData: '1',
+        multipleFieldFilters: '0',
       },
-      children
+      children,
     );
 
     return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n${stringifyXml([pivotTableNode])}`;

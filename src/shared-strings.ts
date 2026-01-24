@@ -121,7 +121,7 @@ export class SharedStrings {
         count: String(this.strings.length),
         uniqueCount: String(this.strings.length),
       },
-      siElements
+      siElements,
     );
 
     return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n${stringifyXml([sst])}`;

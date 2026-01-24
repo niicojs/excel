@@ -1,13 +1,5 @@
 import type { CellStyle, BorderType } from './types';
-import {
-  parseXml,
-  findElement,
-  getChildren,
-  getAttr,
-  XmlNode,
-  stringifyXml,
-  createElement,
-} from './utils/xml';
+import { parseXml, findElement, getChildren, getAttr, XmlNode, stringifyXml, createElement } from './utils/xml';
 
 /**
  * Normalize a color to ARGB format (8 hex chars).
@@ -400,12 +392,7 @@ export class Styles {
     // Try to find existing border
     for (let i = 0; i < this._borders.length; i++) {
       const b = this._borders[i];
-      if (
-        b.top === border.top &&
-        b.bottom === border.bottom &&
-        b.left === border.left &&
-        b.right === border.right
-      ) {
+      if (b.top === border.top && b.bottom === border.bottom && b.left === border.left && b.right === border.right) {
         return i;
       }
     }
@@ -463,7 +450,9 @@ export class Styles {
 
     // Cell style xfs (required but we just add a default)
     children.push(
-      createElement('cellStyleXfs', { count: '1' }, [createElement('xf', { numFmtId: '0', fontId: '0', fillId: '0', borderId: '0' }, [])])
+      createElement('cellStyleXfs', { count: '1' }, [
+        createElement('xf', { numFmtId: '0', fontId: '0', fillId: '0', borderId: '0' }, []),
+      ]),
     );
 
     // Cell xfs
@@ -474,13 +463,13 @@ export class Styles {
     children.push(
       createElement('cellStyles', { count: '1' }, [
         createElement('cellStyle', { name: 'Normal', xfId: '0', builtinId: '0' }, []),
-      ])
+      ]),
     );
 
     const styleSheet = createElement(
       'styleSheet',
       { xmlns: 'http://schemas.openxmlformats.org/spreadsheetml/2006/main' },
-      children
+      children,
     );
 
     return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n${stringifyXml([styleSheet])}`;

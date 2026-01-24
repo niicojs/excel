@@ -7,15 +7,7 @@ import { PivotTable } from './pivot-table';
 import { PivotCache } from './pivot-cache';
 import { readZip, writeZip, readZipText, writeZipText, ZipFiles } from './utils/zip';
 import { parseAddress, parseRange, toAddress } from './utils/address';
-import {
-  parseXml,
-  findElement,
-  getChildren,
-  getAttr,
-  XmlNode,
-  stringifyXml,
-  createElement,
-} from './utils/xml';
+import { parseXml, findElement, getChildren, getAttr, XmlNode, stringifyXml, createElement } from './utils/xml';
 
 /**
  * Represents an Excel workbook (.xlsx file)
@@ -329,6 +321,10 @@ export class Workbook {
     const cacheId = this._nextCacheId++;
     const cache = new PivotCache(cacheId, sourceSheet, sourceRange);
     cache.buildFromData(headers, data);
+    // refreshOnLoad defaults to true; only disable if explicitly set to false
+    if (config.refreshOnLoad === false) {
+      cache.refreshOnLoad = false;
+    }
     this._pivotCaches.push(cache);
 
     // Create pivot table
@@ -340,7 +336,7 @@ export class Workbook {
       targetCell,
       targetAddr.row + 1, // Convert to 1-based
       targetAddr.col,
-      pivotTableIndex
+      pivotTableIndex,
     );
     this._pivotTables.push(pivotTable);
 
@@ -361,10 +357,7 @@ export class Workbook {
   /**
    * Extract headers and data from a source range
    */
-  private _extractSourceData(
-    sheet: Worksheet,
-    rangeStr: string
-  ): { headers: string[]; data: CellValue[][] } {
+  private _extractSourceData(sheet: Worksheet, rangeStr: string): { headers: string[]; data: CellValue[][] } {
     const range = parseRange(rangeStr);
     const headers: string[] = [];
     const data: CellValue[][] = [];
@@ -493,7 +486,7 @@ export class Workbook {
 
   private _updateWorkbookXml(): void {
     const sheetNodes: XmlNode[] = this._sheetDefs.map((def) =>
-      createElement('sheet', { name: def.name, sheetId: String(def.sheetId), 'r:id': def.rId }, [])
+      createElement('sheet', { name: def.name, sheetId: String(def.sheetId), 'r:id': def.rId }, []),
     );
 
     const sheetsNode = createElement('sheets', {}, sheetNodes);
@@ -516,7 +509,7 @@ export class Workbook {
         xmlns: 'http://schemas.openxmlformats.org/spreadsheetml/2006/main',
         'xmlns:r': 'http://schemas.openxmlformats.org/officeDocument/2006/relationships',
       },
-      children
+      children,
     );
 
     const xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n${stringifyXml([workbookNode])}`;
@@ -525,7 +518,7 @@ export class Workbook {
 
   private _updateRelationshipsXml(): void {
     const relNodes: XmlNode[] = this._relationships.map((rel) =>
-      createElement('Relationship', { Id: rel.id, Type: rel.type, Target: rel.target }, [])
+      createElement('Relationship', { Id: rel.id, Type: rel.type, Target: rel.target }, []),
     );
 
     let nextRelId = this._relationships.length + 1;
@@ -533,7 +526,7 @@ export class Workbook {
     // Add shared strings relationship if needed
     if (this._sharedStrings.count > 0) {
       const hasSharedStrings = this._relationships.some(
-        (r) => r.type === 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings'
+        (r) => r.type === 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings',
       );
       if (!hasSharedStrings) {
         relNodes.push(
@@ -544,15 +537,15 @@ export class Workbook {
               Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings',
               Target: 'sharedStrings.xml',
             },
-            []
-          )
+            [],
+          ),
         );
       }
     }
 
     // Add styles relationship if needed
     const hasStyles = this._relationships.some(
-      (r) => r.type === 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles'
+      (r) => r.type === 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles',
     );
     if (!hasStyles) {
       relNodes.push(
@@ -563,8 +556,8 @@ export class Workbook {
             Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles',
             Target: 'styles.xml',
           },
-          []
-        )
+          [],
+        ),
       );
     }
 
@@ -578,15 +571,15 @@ export class Workbook {
             Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheDefinition',
             Target: `pivotCache/pivotCacheDefinition${i + 1}.xml`,
           },
-          []
-        )
+          [],
+        ),
       );
     }
 
     const relsNode = createElement(
       'Relationships',
       { xmlns: 'http://schemas.openxmlformats.org/package/2006/relationships' },
-      relNodes
+      relNodes,
     );
 
     const xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n${stringifyXml([relsNode])}`;
@@ -595,16 +588,41 @@ export class Workbook {
 
   private _updateContentTypes(): void {
     const types: XmlNode[] = [
-      createElement('Default', { Extension: 'rels', ContentType: 'application/vnd.openxmlformats-package.relationships+xml' }, []),
+      createElement(
+        'Default',
+        { Extension: 'rels', ContentType: 'application/vnd.openxmlformats-package.relationships+xml' },
+        [],
+      ),
       createElement('Default', { Extension: 'xml', ContentType: 'application/xml' }, []),
-      createElement('Override', { PartName: '/xl/workbook.xml', ContentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml' }, []),
-      createElement('Override', { PartName: '/xl/styles.xml', ContentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml' }, []),
+      createElement(
+        'Override',
+        {
+          PartName: '/xl/workbook.xml',
+          ContentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml',
+        },
+        [],
+      ),
+      createElement(
+        'Override',
+        {
+          PartName: '/xl/styles.xml',
+          ContentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml',
+        },
+        [],
+      ),
     ];
 
     // Add shared strings if present
     if (this._sharedStrings.count > 0) {
       types.push(
-        createElement('Override', { PartName: '/xl/sharedStrings.xml', ContentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml' }, [])
+        createElement(
+          'Override',
+          {
+            PartName: '/xl/sharedStrings.xml',
+            ContentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sharedStrings+xml',
+          },
+          [],
+        ),
       );
     }
 
@@ -613,7 +631,14 @@ export class Workbook {
       const rel = this._relationships.find((r) => r.id === def.rId);
       if (rel) {
         types.push(
-          createElement('Override', { PartName: `/xl/${rel.target}`, ContentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml' }, [])
+          createElement(
+            'Override',
+            {
+              PartName: `/xl/${rel.target}`,
+              ContentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml',
+            },
+            [],
+          ),
         );
       }
     }
@@ -621,30 +646,46 @@ export class Workbook {
     // Add pivot cache definitions and records
     for (let i = 0; i < this._pivotCaches.length; i++) {
       types.push(
-        createElement('Override', {
-          PartName: `/xl/pivotCache/pivotCacheDefinition${i + 1}.xml`,
-          ContentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.pivotCacheDefinition+xml',
-        }, [])
+        createElement(
+          'Override',
+          {
+            PartName: `/xl/pivotCache/pivotCacheDefinition${i + 1}.xml`,
+            ContentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.pivotCacheDefinition+xml',
+          },
+          [],
+        ),
       );
       types.push(
-        createElement('Override', {
-          PartName: `/xl/pivotCache/pivotCacheRecords${i + 1}.xml`,
-          ContentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.pivotCacheRecords+xml',
-        }, [])
+        createElement(
+          'Override',
+          {
+            PartName: `/xl/pivotCache/pivotCacheRecords${i + 1}.xml`,
+            ContentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.pivotCacheRecords+xml',
+          },
+          [],
+        ),
       );
     }
 
     // Add pivot tables
     for (let i = 0; i < this._pivotTables.length; i++) {
       types.push(
-        createElement('Override', {
-          PartName: `/xl/pivotTables/pivotTable${i + 1}.xml`,
-          ContentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.pivotTable+xml',
-        }, [])
+        createElement(
+          'Override',
+          {
+            PartName: `/xl/pivotTables/pivotTable${i + 1}.xml`,
+            ContentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.pivotTable+xml',
+          },
+          [],
+        ),
       );
     }
 
-    const typesNode = createElement('Types', { xmlns: 'http://schemas.openxmlformats.org/package/2006/content-types' }, types);
+    const typesNode = createElement(
+      'Types',
+      { xmlns: 'http://schemas.openxmlformats.org/package/2006/content-types' },
+      types,
+    );
 
     const xml = `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n${stringifyXml([typesNode])}`;
     writeZipText(this._files, '[Content_Types].xml', xml);
@@ -663,11 +704,15 @@ export class Workbook {
               Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument',
               Target: 'xl/workbook.xml',
             },
-            []
+            [],
           ),
-        ]
+        ],
       );
-      writeZipText(this._files, '_rels/.rels', `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n${stringifyXml([rootRels])}`);
+      writeZipText(
+        this._files,
+        '_rels/.rels',
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n${stringifyXml([rootRels])}`,
+      );
     }
   }
 
@@ -712,11 +757,15 @@ export class Workbook {
               Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheRecords',
               Target: `pivotCacheRecords${cacheIdx}.xml`,
             },
-            []
+            [],
           ),
-        ]
+        ],
       );
-      writeZipText(this._files, cacheRelsPath, `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n${stringifyXml([cacheRels])}`);
+      writeZipText(
+        this._files,
+        cacheRelsPath,
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n${stringifyXml([cacheRels])}`,
+      );
     }
 
     // Generate pivot table files
@@ -742,11 +791,15 @@ export class Workbook {
               Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheDefinition',
               Target: `../pivotCache/pivotCacheDefinition${cacheIdx}.xml`,
             },
-            []
+            [],
           ),
-        ]
+        ],
       );
-      writeZipText(this._files, ptRelsPath, `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n${stringifyXml([ptRels])}`);
+      writeZipText(
+        this._files,
+        ptRelsPath,
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n${stringifyXml([ptRels])}`,
+      );
     }
 
     // Generate worksheet relationships for pivot tables
@@ -772,17 +825,21 @@ export class Workbook {
               Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotTable',
               Target: `../pivotTables/pivotTable${pt.index}.xml`,
             },
-            []
-          )
+            [],
+          ),
         );
       }
 
       const sheetRels = createElement(
         'Relationships',
         { xmlns: 'http://schemas.openxmlformats.org/package/2006/relationships' },
-        relNodes
+        relNodes,
       );
-      writeZipText(this._files, sheetRelsPath, `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n${stringifyXml([sheetRels])}`);
+      writeZipText(
+        this._files,
+        sheetRelsPath,
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n${stringifyXml([sheetRels])}`,
+      );
     }
   }
 }
