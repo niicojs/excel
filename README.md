@@ -9,6 +9,9 @@ A TypeScript library for Excel/OpenXML manipulation with maximum format preserva
 - Full formula support (read/write/preserve)
 - Cell styles (fonts, fills, borders, alignment)
 - Merged cells
+- Column widths and row heights
+- Freeze panes
+- Pivot tables with fluent API
 - Sheet operations (add, delete, rename, copy)
 - Create sheets from arrays of objects (`addSheetFromData`)
 - Convert sheets to JSON arrays (`toJson`)
@@ -139,6 +142,47 @@ sheet.unmergeCells('A1:C1');
 console.log(sheet.mergedCells); // ['A1:C3', 'D5:E10', ...]
 ```
 
+## Column Widths and Row Heights
+
+```typescript
+const sheet = wb.sheet(0);
+
+// Set column width (by letter or 0-based index)
+sheet.setColumnWidth('A', 20);
+sheet.setColumnWidth(1, 15); // Column B
+
+// Get column width
+const width = sheet.getColumnWidth('A'); // 20 or undefined
+
+// Set row height (0-based index)
+sheet.setRowHeight(0, 30); // First row
+
+// Get row height
+const height = sheet.getRowHeight(0); // 30 or undefined
+```
+
+## Freeze Panes
+
+```typescript
+const sheet = wb.sheet(0);
+
+// Freeze first row (header)
+sheet.freezePane(1, 0);
+
+// Freeze first column
+sheet.freezePane(0, 1);
+
+// Freeze first row and first column
+sheet.freezePane(1, 1);
+
+// Unfreeze
+sheet.freezePane(0, 0);
+
+// Get current freeze pane configuration
+const frozen = sheet.getFrozenPane();
+// { row: 1, col: 0 } or null
+```
+
 ## Sheet Operations
 
 ```typescript
@@ -163,6 +207,56 @@ wb.copySheet('RawData', 'RawData_Backup');
 
 // Delete sheet
 wb.deleteSheet('Summary');
+```
+
+## Pivot Tables
+
+Create pivot tables with a fluent API:
+
+```typescript
+const wb = await Workbook.fromFile('sales-data.xlsx');
+
+// Create a pivot table from source data
+const pivot = wb.createPivotTable({
+  name: 'SalesPivot',
+  source: 'Data!A1:E100', // Source range with headers
+  target: 'Summary!A3', // Where to place the pivot table
+  refreshOnLoad: true, // Refresh when file opens (default: true)
+});
+
+// Configure fields using fluent API
+pivot
+  .addRowField('Region') // Group by region
+  .addRowField('Product') // Then by product
+  .addColumnField('Year') // Columns by year
+  .addValueField('Sales', 'sum', 'Total Sales') // Sum of sales
+  .addValueField('Quantity', 'count', 'Order Count') // Count of orders
+  .addFilterField('Category'); // Page filter
+
+// Sort and filter fields
+pivot
+  .sortField('Region', 'asc') // Sort ascending
+  .filterField('Product', { include: ['Widget', 'Gadget'] }); // Include only these
+
+await wb.toFile('report.xlsx');
+```
+
+### Pivot Table API
+
+```typescript
+// Add fields to different areas
+pivot.addRowField(fieldName: string): PivotTable
+pivot.addColumnField(fieldName: string): PivotTable
+pivot.addValueField(fieldName: string, aggregation?: AggregationType, displayName?: string): PivotTable
+pivot.addFilterField(fieldName: string): PivotTable
+
+// Aggregation types: 'sum' | 'count' | 'average' | 'min' | 'max'
+
+// Sort a row or column field
+pivot.sortField(fieldName: string, order: 'asc' | 'desc'): PivotTable
+
+// Filter field values
+pivot.filterField(fieldName: string, filter: { include?: string[] } | { exclude?: string[] }): PivotTable
 ```
 
 ## Creating Sheets from Data
@@ -226,7 +320,7 @@ const data = sheet.toJson();
 // [{ name: 'Alice', age: 30 }, { name: 'Bob', age: 25 }]
 
 // Using custom field names (first row is data, not headers)
-const data = sheet.toJson({
+const data2 = sheet.toJson({
   fields: ['name', 'age', 'city'],
 });
 
@@ -238,20 +332,25 @@ interface Person {
 const people = sheet.toJson<Person>();
 
 // Starting from a specific position
-const data = sheet.toJson({
+const data3 = sheet.toJson({
   startRow: 2, // Skip first 2 rows (0-based)
   startCol: 1, // Start from column B
 });
 
 // Limiting the range
-const data = sheet.toJson({
+const data4 = sheet.toJson({
   endRow: 10, // Stop at row 11 (0-based, inclusive)
   endCol: 3, // Only read columns A-D
 });
 
 // Continue past empty rows
-const data = sheet.toJson({
+const data5 = sheet.toJson({
   stopOnEmptyRow: false, // Default is true
+});
+
+// Control how dates are serialized
+const data6 = sheet.toJson({
+  dateHandling: 'isoString', // 'jsDate' | 'excelSerial' | 'isoString'
 });
 ```
 
@@ -277,11 +376,24 @@ const readData = sheet.toJson();
 ## Saving
 
 ```typescript
-// Save to file
-await wb.toFile('output.xlsx');
+// Load from file
+const wb = await Workbook.fromFile('template.xlsx');
 
-// Save to buffer (Uint8Array)
-const buffer = await wb.toBuffer();
+// Or load from buffer
+const buffer = await fetch('https://example.com/file.xlsx').then((r) => r.arrayBuffer());
+const wb2 = await Workbook.fromBuffer(new Uint8Array(buffer));
+
+// Read data
+const sheet = wb.sheet('Sheet1');
+console.log(sheet.cell('A1').value); // The cell value
+console.log(sheet.cell('A1').formula); // The formula (if any)
+console.log(sheet.cell('A1').type); // 'string' | 'number' | 'boolean' | 'date' | 'error' | 'empty'
+
+// Check if a cell exists without creating it
+const existingCell = sheet.getCellIfExists('A1');
+if (existingCell) {
+  console.log(existingCell.value);
+}
 ```
 
 ## Type Definitions
@@ -331,6 +443,21 @@ interface SheetToJsonConfig {
   endCol?: number;
   stopOnEmptyRow?: boolean; // Default: true
   dateHandling?: 'jsDate' | 'excelSerial' | 'isoString'; // Default: 'jsDate'
+}
+
+// Pivot table configuration
+interface PivotTableConfig {
+  name: string;
+  source: string; // e.g., "Sheet1!A1:D100"
+  target: string; // e.g., "Sheet2!A3"
+  refreshOnLoad?: boolean; // Default: true
+}
+
+type AggregationType = 'sum' | 'count' | 'average' | 'min' | 'max';
+type PivotSortOrder = 'asc' | 'desc';
+interface PivotFieldFilter {
+  include?: string[];
+  exclude?: string[];
 }
 ```
 

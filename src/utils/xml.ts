@@ -138,10 +138,3 @@ export const createElement = (tagName: string, attrs?: Record<string, string>, c
 export const createText = (text: string): XmlNode => {
   return { '#text': text } as unknown as XmlNode;
 };
-
-/**
- * Adds XML declaration to the start of an XML string
- */
-export const addXmlDeclaration = (xml: string): string => {
-  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n${xml}`;
-};

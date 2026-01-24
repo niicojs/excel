@@ -38,6 +38,51 @@ export class Styles {
   private _styleObjectCache: Map<number, CellStyle> = new Map();
 
   /**
+   * Generate a deterministic cache key for a style object.
+   * More efficient than JSON.stringify as it avoids the overhead of
+   * full JSON serialization and produces a consistent key regardless
+   * of property order.
+   */
+  private _getStyleKey(style: CellStyle): string {
+    // Use a delimiter that won't appear in values
+    const SEP = '\x00';
+
+    // Build key from all style properties in a fixed order
+    const parts: string[] = [
+      style.bold ? '1' : '0',
+      style.italic ? '1' : '0',
+      style.underline === true ? '1' : style.underline === 'single' ? 's' : style.underline === 'double' ? 'd' : '0',
+      style.strike ? '1' : '0',
+      style.fontSize?.toString() ?? '',
+      style.fontName ?? '',
+      style.fontColor ?? '',
+      style.fill ?? '',
+      style.numberFormat ?? '',
+    ];
+
+    // Border properties
+    if (style.border) {
+      parts.push(style.border.top ?? '', style.border.bottom ?? '', style.border.left ?? '', style.border.right ?? '');
+    } else {
+      parts.push('', '', '', '');
+    }
+
+    // Alignment properties
+    if (style.alignment) {
+      parts.push(
+        style.alignment.horizontal ?? '',
+        style.alignment.vertical ?? '',
+        style.alignment.wrapText ? '1' : '0',
+        style.alignment.textRotation?.toString() ?? '',
+      );
+    } else {
+      parts.push('', '', '0', '');
+    }
+
+    return parts.join(SEP);
+  }
+
+  /**
    * Parse styles from XML content
    */
   static parse(xml: string): Styles {
@@ -289,7 +334,7 @@ export class Styles {
    * Uses caching to deduplicate identical styles
    */
   createStyle(style: CellStyle): number {
-    const key = JSON.stringify(style);
+    const key = this._getStyleKey(style);
     const cached = this._styleCache.get(key);
     if (cached !== undefined) {
       return cached;
