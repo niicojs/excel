@@ -5,6 +5,8 @@ export { Cell } from './cell';
 export { Range } from './range';
 export { SharedStrings } from './shared-strings';
 export { Styles } from './styles';
+export { PivotTable } from './pivot-table';
+export { PivotCache } from './pivot-cache';
 
 // Type exports
 export type {
@@ -18,6 +20,11 @@ export type {
   BorderStyle,
   BorderType,
   Alignment,
+  // Pivot table types
+  PivotTableConfig,
+  PivotValueConfig,
+  AggregationType,
+  PivotFieldAxis,
 } from './types';
 
 // Utility exports

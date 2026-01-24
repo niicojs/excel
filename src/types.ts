@@ -115,3 +115,57 @@ export interface Relationship {
   type: string;
   target: string;
 }
+
+/**
+ * Pivot table aggregation functions
+ */
+export type AggregationType = 'sum' | 'count' | 'average' | 'min' | 'max';
+
+/**
+ * Configuration for a value field in a pivot table
+ */
+export interface PivotValueConfig {
+  /** Source field name (column header) */
+  field: string;
+  /** Aggregation function */
+  aggregation: AggregationType;
+  /** Display name (e.g., "Sum of Sales") */
+  name?: string;
+}
+
+/**
+ * Configuration for creating a pivot table
+ */
+export interface PivotTableConfig {
+  /** Name of the pivot table */
+  name: string;
+  /** Source data range with sheet name (e.g., "Sheet1!A1:D100") */
+  source: string;
+  /** Target cell where pivot table will be placed (e.g., "Sheet2!A3") */
+  target: string;
+}
+
+/**
+ * Internal representation of a pivot cache field
+ */
+export interface PivotCacheField {
+  /** Field name (from header row) */
+  name: string;
+  /** Field index (0-based) */
+  index: number;
+  /** Whether this field contains numbers */
+  isNumeric: boolean;
+  /** Whether this field contains dates */
+  isDate: boolean;
+  /** Unique string values (for shared items) */
+  sharedItems: string[];
+  /** Min numeric value */
+  minValue?: number;
+  /** Max numeric value */
+  maxValue?: number;
+}
+
+/**
+ * Pivot field axis assignment
+ */
+export type PivotFieldAxis = 'row' | 'column' | 'filter' | 'value';
