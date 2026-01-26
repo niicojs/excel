@@ -1,4 +1,5 @@
 import type { AggregationType, PivotFieldAxis } from './types';
+import type { Styles } from './styles';
 import { PivotCache } from './pivot-cache';
 import { createElement, stringifyXml, XmlNode } from './utils/xml';
 
@@ -11,6 +12,7 @@ interface FieldAssignment {
   axis: PivotFieldAxis;
   aggregation?: AggregationType;
   displayName?: string;
+  numberFormat?: string;
 }
 
 /**
@@ -30,6 +32,7 @@ export class PivotTable {
   private _filterFields: FieldAssignment[] = [];
 
   private _pivotTableIndex: number;
+  private _styles: Styles | null = null;
 
   constructor(
     name: string,
@@ -85,6 +88,15 @@ export class PivotTable {
   }
 
   /**
+   * Set the styles reference for number format resolution
+   * @internal
+   */
+  setStyles(styles: Styles): this {
+    this._styles = styles;
+    return this;
+  }
+
+  /**
    * Add a field to the row area
    * @param fieldName - Name of the source field (column header)
    */
@@ -127,8 +139,14 @@ export class PivotTable {
    * @param fieldName - Name of the source field (column header)
    * @param aggregation - Aggregation function (sum, count, average, min, max)
    * @param displayName - Optional display name (defaults to "Sum of FieldName")
+   * @param numberFormat - Optional number format (e.g., '$#,##0.00', '0.00%')
    */
-  addValueField(fieldName: string, aggregation: AggregationType = 'sum', displayName?: string): this {
+  addValueField(
+    fieldName: string,
+    aggregation: AggregationType = 'sum',
+    displayName?: string,
+    numberFormat?: string,
+  ): this {
     const fieldIndex = this._cache.getFieldIndex(fieldName);
     if (fieldIndex < 0) {
       throw new Error(`Field not found in source data: ${fieldName}`);
@@ -142,6 +160,7 @@ export class PivotTable {
       axis: 'value',
       aggregation,
       displayName: displayName || defaultName,
+      numberFormat,
     });
 
     return this;
@@ -251,21 +270,27 @@ export class PivotTable {
 
     // Data fields (values)
     if (this._valueFields.length > 0) {
-      const dataFieldNodes = this._valueFields.map((f) =>
-        createElement(
-          'dataField',
-          {
-            name: f.displayName || f.fieldName,
-            fld: String(f.fieldIndex),
-            baseField: '0',
-            baseItem: '0',
-            subtotal: f.aggregation || 'sum',
-          },
-          [],
-        ),
-      );
+      const dataFieldNodes = this._valueFields.map((f) => {
+        const attrs: Record<string, string> = {
+          name: f.displayName || f.fieldName,
+          fld: String(f.fieldIndex),
+          baseField: '0',
+          baseItem: '0',
+          subtotal: f.aggregation || 'sum',
+        };
+
+        // Add numFmtId if format specified and styles available
+        if (f.numberFormat && this._styles) {
+          attrs.numFmtId = String(this._styles.getOrCreateNumFmtId(f.numberFormat));
+        }
+
+        return createElement('dataField', attrs, []);
+      });
       children.push(createElement('dataFields', { count: String(dataFieldNodes.length) }, dataFieldNodes));
     }
+
+    // Check if any value field has a number format
+    const hasNumberFormats = this._valueFields.some((f) => f.numberFormat);
 
     // Pivot table style
     children.push(
@@ -290,7 +315,7 @@ export class PivotTable {
         'xmlns:r': 'http://schemas.openxmlformats.org/officeDocument/2006/relationships',
         name: this._name,
         cacheId: String(this._cache.cacheId),
-        applyNumberFormats: '0',
+        applyNumberFormats: hasNumberFormats ? '1' : '0',
         applyBorderFormats: '0',
         applyFontFormats: '0',
         applyPatternFormats: '0',

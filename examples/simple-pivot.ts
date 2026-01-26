@@ -35,7 +35,7 @@ async function main() {
     target: 'example!A1',
   })
     .addRowField('Category')
-    .addValueField('Amount', 'sum', 'Sum of Amount');
+    .addValueField('Amount', 'sum', 'Sum of Amount', '0.00');
 
   await wb.toFile('examples/output/simple-pivot.xlsx');
   console.log('Created: examples/output/simple-pivot.xlsx');

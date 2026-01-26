@@ -2,6 +2,48 @@ import type { CellStyle, BorderType } from './types';
 import { parseXml, findElement, getChildren, getAttr, XmlNode, stringifyXml, createElement } from './utils/xml';
 
 /**
+ * Excel built-in number format IDs (0-163 are reserved).
+ * These formats don't need to be defined in the numFmts element.
+ */
+const BUILTIN_NUM_FMTS: Map<string, number> = new Map([
+  ['General', 0],
+  ['0', 1],
+  ['0.00', 2],
+  ['#,##0', 3],
+  ['#,##0.00', 4],
+  ['0%', 9],
+  ['0.00%', 10],
+  ['0.00E+00', 11],
+  ['# ?/?', 12],
+  ['# ??/??', 13],
+  ['mm-dd-yy', 14],
+  ['d-mmm-yy', 15],
+  ['d-mmm', 16],
+  ['mmm-yy', 17],
+  ['h:mm AM/PM', 18],
+  ['h:mm:ss AM/PM', 19],
+  ['h:mm', 20],
+  ['h:mm:ss', 21],
+  ['m/d/yy h:mm', 22],
+  ['#,##0 ;(#,##0)', 37],
+  ['#,##0 ;[Red](#,##0)', 38],
+  ['#,##0.00;(#,##0.00)', 39],
+  ['#,##0.00;[Red](#,##0.00)', 40],
+  ['mm:ss', 45],
+  ['[h]:mm:ss', 46],
+  ['mmss.0', 47],
+  ['##0.0E+0', 48],
+  ['@', 49],
+]);
+
+/**
+ * Reverse lookup: built-in format ID -> format code
+ */
+const BUILTIN_NUM_FMT_CODES: Map<number, string> = new Map(
+  Array.from(BUILTIN_NUM_FMTS.entries()).map(([code, id]) => [id, code]),
+);
+
+/**
  * Normalize a color to ARGB format (8 hex chars).
  * Accepts: "#RGB", "#RRGGBB", "RGB", "RRGGBB", "AARRGGBB", "#AARRGGBB"
  */
@@ -234,7 +276,8 @@ export class Styles {
     const font = this._fonts[xf.fontId];
     const fill = this._fills[xf.fillId];
     const border = this._borders[xf.borderId];
-    const numFmt = this._numFmts.get(xf.numFmtId);
+    // Check custom formats first, then fall back to built-in format codes
+    const numFmt = this._numFmts.get(xf.numFmtId) ?? BUILTIN_NUM_FMT_CODES.get(xf.numFmtId);
 
     const style: CellStyle = {};
 
@@ -403,15 +446,32 @@ export class Styles {
   }
 
   private _findOrCreateNumFmt(format: string): number {
-    // Check if already exists
+    // Check built-in formats first (IDs 0-163)
+    const builtinId = BUILTIN_NUM_FMTS.get(format);
+    if (builtinId !== undefined) {
+      return builtinId;
+    }
+
+    // Check if already exists in custom formats
     for (const [id, code] of this._numFmts) {
       if (code === format) return id;
     }
 
-    // Create new (custom formats start at 164)
-    const id = Math.max(164, ...Array.from(this._numFmts.keys())) + 1;
+    // Create new custom format (IDs 164+)
+    const existingIds = Array.from(this._numFmts.keys());
+    const id = existingIds.length > 0 ? Math.max(...existingIds) + 1 : 164;
     this._numFmts.set(id, format);
     return id;
+  }
+
+  /**
+   * Get or create a number format ID for the given format string.
+   * Returns built-in IDs (0-163) for standard formats, or creates custom IDs (164+).
+   * @param format - The number format string (e.g., '0.00', '#,##0', '$#,##0.00')
+   */
+  getOrCreateNumFmtId(format: string): number {
+    this._dirty = true;
+    return this._findOrCreateNumFmt(format);
   }
 
   /**
