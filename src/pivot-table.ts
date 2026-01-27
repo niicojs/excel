@@ -1,4 +1,4 @@
-import type { AggregationType, PivotFieldAxis } from './types';
+import type { AggregationType, PivotFieldAxis, PivotValueConfig } from './types';
 import type { Styles } from './styles';
 import { PivotCache } from './pivot-cache';
 import { createElement, stringifyXml, XmlNode } from './utils/xml';
@@ -12,7 +12,7 @@ interface FieldAssignment {
   axis: PivotFieldAxis;
   aggregation?: AggregationType;
   displayName?: string;
-  numberFormat?: string;
+  numFmtId?: number;
 }
 
 /**
@@ -135,32 +135,70 @@ export class PivotTable {
   }
 
   /**
-   * Add a field to the values area with aggregation
-   * @param fieldName - Name of the source field (column header)
-   * @param aggregation - Aggregation function (sum, count, average, min, max)
-   * @param displayName - Optional display name (defaults to "Sum of FieldName")
-   * @param numberFormat - Optional number format (e.g., '$#,##0.00', '0.00%')
+   * Add a field to the values area with aggregation.
+   *
+   * Supports two call signatures:
+   * - Positional: `addValueField(fieldName, aggregation?, displayName?, numberFormat?)`
+   * - Object: `addValueField({ field, aggregation?, name?, numberFormat? })`
+   *
+   * @example
+   * // Positional arguments
+   * pivot.addValueField('Sales', 'sum', 'Total Sales', '$#,##0.00');
+   *
+   * // Object form
+   * pivot.addValueField({ field: 'Sales', aggregation: 'sum', name: 'Total Sales', numberFormat: '$#,##0.00' });
    */
+  addValueField(config: PivotValueConfig): this;
   addValueField(
     fieldName: string,
+    aggregation?: AggregationType,
+    displayName?: string,
+    numberFormat?: string,
+  ): this;
+  addValueField(
+    fieldNameOrConfig: string | PivotValueConfig,
     aggregation: AggregationType = 'sum',
     displayName?: string,
     numberFormat?: string,
   ): this {
+    // Normalize arguments to a common form
+    let fieldName: string;
+    let agg: AggregationType;
+    let name: string | undefined;
+    let format: string | undefined;
+
+    if (typeof fieldNameOrConfig === 'object') {
+      fieldName = fieldNameOrConfig.field;
+      agg = fieldNameOrConfig.aggregation ?? 'sum';
+      name = fieldNameOrConfig.name;
+      format = fieldNameOrConfig.numberFormat;
+    } else {
+      fieldName = fieldNameOrConfig;
+      agg = aggregation;
+      name = displayName;
+      format = numberFormat;
+    }
+
     const fieldIndex = this._cache.getFieldIndex(fieldName);
     if (fieldIndex < 0) {
       throw new Error(`Field not found in source data: ${fieldName}`);
     }
 
-    const defaultName = `${aggregation.charAt(0).toUpperCase() + aggregation.slice(1)} of ${fieldName}`;
+    const defaultName = `${agg.charAt(0).toUpperCase() + agg.slice(1)} of ${fieldName}`;
+
+    // Resolve numFmtId immediately if format is provided and styles are available
+    let numFmtId: number | undefined;
+    if (format && this._styles) {
+      numFmtId = this._styles.getOrCreateNumFmtId(format);
+    }
 
     this._valueFields.push({
       fieldName,
       fieldIndex,
       axis: 'value',
-      aggregation,
-      displayName: displayName || defaultName,
-      numberFormat,
+      aggregation: agg,
+      displayName: name || defaultName,
+      numFmtId,
     });
 
     return this;
@@ -279,9 +317,9 @@ export class PivotTable {
           subtotal: f.aggregation || 'sum',
         };
 
-        // Add numFmtId if format specified and styles available
-        if (f.numberFormat && this._styles) {
-          attrs.numFmtId = String(this._styles.getOrCreateNumFmtId(f.numberFormat));
+        // Add numFmtId if it was resolved during addValueField
+        if (f.numFmtId !== undefined) {
+          attrs.numFmtId = String(f.numFmtId);
         }
 
         return createElement('dataField', attrs, []);
@@ -290,7 +328,7 @@ export class PivotTable {
     }
 
     // Check if any value field has a number format
-    const hasNumberFormats = this._valueFields.some((f) => f.numberFormat);
+    const hasNumberFormats = this._valueFields.some((f) => f.numFmtId !== undefined);
 
     // Pivot table style
     children.push(

@@ -153,6 +153,45 @@ describe('PivotTable', () => {
       expect(pivot.name).toBe('SalesPivot');
     });
 
+    it('adds value fields using object config', () => {
+      const pivot = wb
+        .createPivotTable({
+          name: 'SalesPivot',
+          source: 'Sheet1!A1:D7',
+          target: 'PivotSheet!A3',
+        })
+        .addValueField({ field: 'Sales', aggregation: 'sum', name: 'Total Sales' });
+
+      expect(pivot.name).toBe('SalesPivot');
+    });
+
+    it('adds value fields with object config and number format', () => {
+      const pivot = wb
+        .createPivotTable({
+          name: 'SalesPivot',
+          source: 'Sheet1!A1:D7',
+          target: 'PivotSheet!A3',
+        })
+        .addValueField({ field: 'Sales', aggregation: 'sum', name: 'Total', numberFormat: '$#,##0.00' });
+
+      const xml = pivot.toXml();
+      expect(xml).toContain('numFmtId=');
+    });
+
+    it('adds value fields with object config using defaults', () => {
+      const pivot = wb
+        .createPivotTable({
+          name: 'SalesPivot',
+          source: 'Sheet1!A1:D7',
+          target: 'PivotSheet!A3',
+        })
+        .addValueField({ field: 'Sales' }); // Only field is required
+
+      const xml = pivot.toXml();
+      expect(xml).toContain('Sum of Sales'); // Default name
+      expect(xml).toContain('subtotal="sum"'); // Default aggregation
+    });
+
     it('adds filter fields', () => {
       const pivot = wb
         .createPivotTable({

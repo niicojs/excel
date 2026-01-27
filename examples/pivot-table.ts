@@ -38,8 +38,8 @@ async function main() {
     for (const product of products) {
       for (const quarter of quarters) {
         const salesperson = salespeople[Math.floor(Math.random() * salespeople.length)];
-        const sales = Math.floor(Math.random() * 50000) + 10000;
-        const units = Math.floor(Math.random() * 100) + 10;
+        const sales = Math.random() * 50000 + 10000;
+        const units = Math.random() * 100 + 10;
 
         sheet.cell(`A${row}`).value = region;
         sheet.cell(`B${row}`).value = product;
@@ -87,6 +87,7 @@ async function main() {
     .addFilterField('Region');
 
   // Create a pivot table with salesperson performance
+  // Demonstrating both positional and object-based addValueField syntax
   console.log('Creating pivot table: Salesperson Performance...');
 
   wb.addSheet('PivotReport3');
@@ -94,14 +95,17 @@ async function main() {
   wb.createPivotTable({
     name: 'SalespersonPerformance',
     source: `SalesData!A1:F${lastDataRow}`,
-    target: 'PivotReport3!H3',
+    target: 'PivotReport3!A3',
   })
     .addRowField('Salesperson')
-    .addValueField('Sales', 'sum', 'Total Sales')
-    .addValueField('Sales', 'average', 'Avg Sale')
-    .addValueField('Units', 'sum', 'Total Units')
-    .addValueField('Sales', 'max', 'Best Sale')
-    .addValueField('Sales', 'min', 'Worst Sale');
+    // Object syntax - all options in one place
+    .addValueField({ field: 'Sales', aggregation: 'sum', name: 'Total Sales', numberFormat: '#,##0 "€"' })
+    .addValueField({ field: 'Sales', aggregation: 'count', name: 'Nombre de Sales' })
+    // Positional syntax - backwards compatible
+    .addValueField('Units', 'sum', 'Total Units', '0')
+    .addValueField('Sales', 'max', 'Best Sale', '#,##0')
+    // Minimal object syntax - only field required
+    .addValueField({ field: 'Sales', aggregation: 'min', name: 'Worst Sale' });
 
   // Save the workbook
   await wb.toFile('examples/output/pivot-table.xlsx');

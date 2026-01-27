@@ -119,10 +119,12 @@ export type AggregationType = 'sum' | 'count' | 'average' | 'min' | 'max';
 export interface PivotValueConfig {
   /** Source field name (column header) */
   field: string;
-  /** Aggregation function */
-  aggregation: AggregationType;
+  /** Aggregation function (default: 'sum') */
+  aggregation?: AggregationType;
   /** Display name (e.g., "Sum of Sales") */
   name?: string;
+  /** Number format (e.g., '$#,##0.00', '0.00%') */
+  numberFormat?: string;
 }
 
 /**
