@@ -251,7 +251,7 @@ describe('PivotTable', () => {
         .filterField('Product', { exclude: ['Gadget'] });
 
       const xml = pivot.toXml();
-      expect(xml).toContain('sortOrder="ascending"');
+      expect(xml).toContain('sortType="ascending"');
       expect(xml).toContain('h="1"');
     });
 
@@ -266,6 +266,105 @@ describe('PivotTable', () => {
       expect(() => pivot.addColumnField('NonExistent')).toThrow('Field not found');
       expect(() => pivot.addValueField('NonExistent', 'sum')).toThrow('Field not found');
       expect(() => pivot.addFilterField('NonExistent')).toThrow('Field not found');
+    });
+
+    it('throws when sorting non-existent field', () => {
+      const pivot = wb.createPivotTable({
+        name: 'SalesPivot',
+        source: 'Sheet1!A1:D7',
+        target: 'PivotSheet!A3',
+      });
+
+      expect(() => pivot.sortField('NonExistent', 'asc')).toThrow('Field not found');
+    });
+
+    it('throws when sorting field not assigned to pivot table', () => {
+      const pivot = wb
+        .createPivotTable({
+          name: 'SalesPivot',
+          source: 'Sheet1!A1:D7',
+          target: 'PivotSheet!A3',
+        })
+        .addRowField('Region');
+
+      expect(() => pivot.sortField('Product', 'asc')).toThrow('not assigned');
+    });
+
+    it('throws when sorting value field', () => {
+      const pivot = wb
+        .createPivotTable({
+          name: 'SalesPivot',
+          source: 'Sheet1!A1:D7',
+          target: 'PivotSheet!A3',
+        })
+        .addValueField('Sales', 'sum');
+
+      expect(() => pivot.sortField('Sales', 'asc')).toThrow('only supported for row or column');
+    });
+
+    it('throws when filtering non-existent field', () => {
+      const pivot = wb.createPivotTable({
+        name: 'SalesPivot',
+        source: 'Sheet1!A1:D7',
+        target: 'PivotSheet!A3',
+      });
+
+      expect(() => pivot.filterField('NonExistent', { include: ['A'] })).toThrow('Field not found');
+    });
+
+    it('throws when filtering field not assigned to pivot table', () => {
+      const pivot = wb
+        .createPivotTable({
+          name: 'SalesPivot',
+          source: 'Sheet1!A1:D7',
+          target: 'PivotSheet!A3',
+        })
+        .addRowField('Region');
+
+      expect(() => pivot.filterField('Product', { include: ['Widget'] })).toThrow('not assigned');
+    });
+
+    it('throws when using both include and exclude in filter', () => {
+      const pivot = wb
+        .createPivotTable({
+          name: 'SalesPivot',
+          source: 'Sheet1!A1:D7',
+          target: 'PivotSheet!A3',
+        })
+        .addRowField('Region');
+
+      expect(() => pivot.filterField('Region', { include: ['North'], exclude: ['South'] })).toThrow(
+        'Cannot use both include and exclude',
+      );
+    });
+
+    it('supports descending sort order', () => {
+      const pivot = wb
+        .createPivotTable({
+          name: 'SalesPivot',
+          source: 'Sheet1!A1:D7',
+          target: 'PivotSheet!A3',
+        })
+        .addRowField('Region')
+        .sortField('Region', 'desc');
+
+      const xml = pivot.toXml();
+      expect(xml).toContain('sortType="descending"');
+    });
+
+    it('supports include filter', () => {
+      const pivot = wb
+        .createPivotTable({
+          name: 'SalesPivot',
+          source: 'Sheet1!A1:D7',
+          target: 'PivotSheet!A3',
+        })
+        .addRowField('Region')
+        .filterField('Region', { include: ['North'] });
+
+      const xml = pivot.toXml();
+      // South and East should be hidden (h="1"), North should not have h attribute
+      expect(xml).toContain('h="1"');
     });
   });
 

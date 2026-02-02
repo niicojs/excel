@@ -1,4 +1,4 @@
-import type { AggregationType, PivotFieldAxis, PivotValueConfig } from './types';
+import type { AggregationType, PivotFieldAxis, PivotFieldFilter, PivotSortOrder, PivotValueConfig } from './types';
 import type { Styles } from './styles';
 import { PivotCache } from './pivot-cache';
 import { createElement, stringifyXml, XmlNode } from './utils/xml';
@@ -13,6 +13,8 @@ interface FieldAssignment {
   aggregation?: AggregationType;
   displayName?: string;
   numFmtId?: number;
+  sortOrder?: PivotSortOrder;
+  filter?: PivotFieldFilter;
 }
 
 /**
@@ -30,6 +32,7 @@ export class PivotTable {
   private _columnFields: FieldAssignment[] = [];
   private _valueFields: FieldAssignment[] = [];
   private _filterFields: FieldAssignment[] = [];
+  private _fieldAssignments: Map<number, FieldAssignment> = new Map();
 
   private _pivotTableIndex: number;
   private _styles: Styles | null = null;
@@ -106,11 +109,13 @@ export class PivotTable {
       throw new Error(`Field not found in source data: ${fieldName}`);
     }
 
-    this._rowFields.push({
+    const assignment: FieldAssignment = {
       fieldName,
       fieldIndex,
       axis: 'row',
-    });
+    };
+    this._rowFields.push(assignment);
+    this._fieldAssignments.set(fieldIndex, assignment);
 
     return this;
   }
@@ -125,11 +130,13 @@ export class PivotTable {
       throw new Error(`Field not found in source data: ${fieldName}`);
     }
 
-    this._columnFields.push({
+    const assignment: FieldAssignment = {
       fieldName,
       fieldIndex,
       axis: 'column',
-    });
+    };
+    this._columnFields.push(assignment);
+    this._fieldAssignments.set(fieldIndex, assignment);
 
     return this;
   }
@@ -149,12 +156,7 @@ export class PivotTable {
    * pivot.addValueField({ field: 'Sales', aggregation: 'sum', name: 'Total Sales', numberFormat: '$#,##0.00' });
    */
   addValueField(config: PivotValueConfig): this;
-  addValueField(
-    fieldName: string,
-    aggregation?: AggregationType,
-    displayName?: string,
-    numberFormat?: string,
-  ): this;
+  addValueField(fieldName: string, aggregation?: AggregationType, displayName?: string, numberFormat?: string): this;
   addValueField(
     fieldNameOrConfig: string | PivotValueConfig,
     aggregation: AggregationType = 'sum',
@@ -192,14 +194,16 @@ export class PivotTable {
       numFmtId = this._styles.getOrCreateNumFmtId(format);
     }
 
-    this._valueFields.push({
+    const assignment: FieldAssignment = {
       fieldName,
       fieldIndex,
       axis: 'value',
       aggregation: agg,
       displayName: name || defaultName,
       numFmtId,
-    });
+    };
+    this._valueFields.push(assignment);
+    this._fieldAssignments.set(fieldIndex, assignment);
 
     return this;
   }
@@ -214,12 +218,61 @@ export class PivotTable {
       throw new Error(`Field not found in source data: ${fieldName}`);
     }
 
-    this._filterFields.push({
+    const assignment: FieldAssignment = {
       fieldName,
       fieldIndex,
       axis: 'filter',
-    });
+    };
+    this._filterFields.push(assignment);
+    this._fieldAssignments.set(fieldIndex, assignment);
 
+    return this;
+  }
+
+  /**
+   * Set a sort order for a row or column field
+   * @param fieldName - Name of the field to sort
+   * @param order - Sort order ('asc' or 'desc')
+   */
+  sortField(fieldName: string, order: PivotSortOrder): this {
+    const fieldIndex = this._cache.getFieldIndex(fieldName);
+    if (fieldIndex < 0) {
+      throw new Error(`Field not found in source data: ${fieldName}`);
+    }
+
+    const assignment = this._fieldAssignments.get(fieldIndex);
+    if (!assignment) {
+      throw new Error(`Field is not assigned to pivot table: ${fieldName}`);
+    }
+    if (assignment.axis !== 'row' && assignment.axis !== 'column') {
+      throw new Error(`Sort is only supported for row or column fields: ${fieldName}`);
+    }
+
+    assignment.sortOrder = order;
+    return this;
+  }
+
+  /**
+   * Filter items for a row, column, or filter field
+   * @param fieldName - Name of the field to filter
+   * @param filter - Filter configuration with include or exclude list
+   */
+  filterField(fieldName: string, filter: PivotFieldFilter): this {
+    const fieldIndex = this._cache.getFieldIndex(fieldName);
+    if (fieldIndex < 0) {
+      throw new Error(`Field not found in source data: ${fieldName}`);
+    }
+
+    const assignment = this._fieldAssignments.get(fieldIndex);
+    if (!assignment) {
+      throw new Error(`Field is not assigned to pivot table: ${fieldName}`);
+    }
+
+    if (filter.include && filter.exclude) {
+      throw new Error('Cannot use both include and exclude in the same filter');
+    }
+
+    assignment.filter = filter;
     return this;
   }
 
@@ -391,30 +444,36 @@ export class PivotTable {
     const filterField = this._filterFields.find((f) => f.fieldIndex === fieldIndex);
     const valueField = this._valueFields.find((f) => f.fieldIndex === fieldIndex);
 
+    // Get the assignment to check for sort/filter options
+    const assignment = rowField || colField || filterField;
+
     if (rowField) {
       attrs.axis = 'axisRow';
       attrs.showAll = '0';
+
+      // Add sort order if specified
+      if (rowField.sortOrder) {
+        attrs.sortType = rowField.sortOrder === 'asc' ? 'ascending' : 'descending';
+      }
+
       // Add items for shared values
       const cacheField = this._cache.fields[fieldIndex];
       if (cacheField && cacheField.sharedItems.length > 0) {
-        const itemNodes: XmlNode[] = [];
-        for (let i = 0; i < cacheField.sharedItems.length; i++) {
-          itemNodes.push(createElement('item', { x: String(i) }, []));
-        }
-        // Add default subtotal item
-        itemNodes.push(createElement('item', { t: 'default' }, []));
+        const itemNodes = this._buildItemNodes(cacheField.sharedItems, assignment?.filter);
         children.push(createElement('items', { count: String(itemNodes.length) }, itemNodes));
       }
     } else if (colField) {
       attrs.axis = 'axisCol';
       attrs.showAll = '0';
+
+      // Add sort order if specified
+      if (colField.sortOrder) {
+        attrs.sortType = colField.sortOrder === 'asc' ? 'ascending' : 'descending';
+      }
+
       const cacheField = this._cache.fields[fieldIndex];
       if (cacheField && cacheField.sharedItems.length > 0) {
-        const itemNodes: XmlNode[] = [];
-        for (let i = 0; i < cacheField.sharedItems.length; i++) {
-          itemNodes.push(createElement('item', { x: String(i) }, []));
-        }
-        itemNodes.push(createElement('item', { t: 'default' }, []));
+        const itemNodes = this._buildItemNodes(cacheField.sharedItems, assignment?.filter);
         children.push(createElement('items', { count: String(itemNodes.length) }, itemNodes));
       }
     } else if (filterField) {
@@ -422,11 +481,7 @@ export class PivotTable {
       attrs.showAll = '0';
       const cacheField = this._cache.fields[fieldIndex];
       if (cacheField && cacheField.sharedItems.length > 0) {
-        const itemNodes: XmlNode[] = [];
-        for (let i = 0; i < cacheField.sharedItems.length; i++) {
-          itemNodes.push(createElement('item', { x: String(i) }, []));
-        }
-        itemNodes.push(createElement('item', { t: 'default' }, []));
+        const itemNodes = this._buildItemNodes(cacheField.sharedItems, assignment?.filter);
         children.push(createElement('items', { count: String(itemNodes.length) }, itemNodes));
       }
     } else if (valueField) {
@@ -437,6 +492,38 @@ export class PivotTable {
     }
 
     return createElement('pivotField', attrs, children);
+  }
+
+  /**
+   * Build item nodes for a pivot field, with optional filtering
+   */
+  private _buildItemNodes(sharedItems: string[], filter?: PivotFieldFilter): XmlNode[] {
+    const itemNodes: XmlNode[] = [];
+
+    for (let i = 0; i < sharedItems.length; i++) {
+      const itemValue = sharedItems[i];
+      const itemAttrs: Record<string, string> = { x: String(i) };
+
+      // Check if this item should be hidden
+      if (filter) {
+        let hidden = false;
+        if (filter.exclude && filter.exclude.includes(itemValue)) {
+          hidden = true;
+        } else if (filter.include && !filter.include.includes(itemValue)) {
+          hidden = true;
+        }
+        if (hidden) {
+          itemAttrs.h = '1';
+        }
+      }
+
+      itemNodes.push(createElement('item', itemAttrs, []));
+    }
+
+    // Add default subtotal item
+    itemNodes.push(createElement('item', { t: 'default' }, []));
+
+    return itemNodes;
   }
 
   /**
