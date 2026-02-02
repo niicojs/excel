@@ -233,30 +233,83 @@ pivot
   .addValueField('Quantity', 'count', 'Order Count') // Count of orders
   .addFilterField('Category'); // Page filter
 
-// Sort and filter fields
-pivot
-  .sortField('Region', 'asc') // Sort ascending
-  .filterField('Product', { include: ['Widget', 'Gadget'] }); // Include only these
-
 await wb.toFile('report.xlsx');
 ```
 
-### Pivot Table API
+### Sorting Fields
+
+Sort row or column fields in ascending or descending order:
+
+```typescript
+pivot
+  .addRowField('Region')
+  .addRowField('Product')
+  .addColumnField('Year')
+  .sortField('Region', 'asc') // Sort regions A-Z
+  .sortField('Year', 'desc'); // Sort years newest first
+```
+
+### Filtering Fields
+
+Filter field values using include or exclude lists:
+
+```typescript
+// Include only specific values
+pivot
+  .addRowField('Region')
+  .filterField('Region', { include: ['North', 'South'] });
+
+// Exclude specific values
+pivot
+  .addColumnField('Product')
+  .filterField('Product', { exclude: ['Discontinued', 'Legacy'] });
+```
+
+### Value Fields with Number Formats
+
+Apply number formats to value fields:
+
+```typescript
+pivot
+  .addValueField('Sales', 'sum', 'Total Sales', '$#,##0.00')
+  .addValueField('Quantity', 'average', 'Avg Qty', '0.00')
+  .addValueField('Margin', 'sum', 'Margin %', '0.00%');
+
+// Or using object syntax
+pivot.addValueField({
+  field: 'Sales',
+  aggregation: 'sum',
+  name: 'Total Sales',
+  numberFormat: '$#,##0.00',
+});
+```
+
+### Pivot Table API Reference
 
 ```typescript
 // Add fields to different areas
 pivot.addRowField(fieldName: string): PivotTable
 pivot.addColumnField(fieldName: string): PivotTable
-pivot.addValueField(fieldName: string, aggregation?: AggregationType, displayName?: string): PivotTable
+pivot.addValueField(fieldName: string, aggregation?: AggregationType, displayName?: string, numberFormat?: string): PivotTable
+pivot.addValueField(config: PivotValueConfig): PivotTable
 pivot.addFilterField(fieldName: string): PivotTable
-
-// Aggregation types: 'sum' | 'count' | 'average' | 'min' | 'max'
 
 // Sort a row or column field
 pivot.sortField(fieldName: string, order: 'asc' | 'desc'): PivotTable
 
-// Filter field values
+// Filter field values (use include OR exclude, not both)
 pivot.filterField(fieldName: string, filter: { include?: string[] } | { exclude?: string[] }): PivotTable
+
+// Aggregation types
+type AggregationType = 'sum' | 'count' | 'average' | 'min' | 'max';
+
+// Value field config object
+interface PivotValueConfig {
+  field: string;
+  aggregation?: AggregationType; // default: 'sum'
+  name?: string; // default: 'Sum of {field}'
+  numberFormat?: string;
+}
 ```
 
 ## Creating Sheets from Data
@@ -453,11 +506,20 @@ interface PivotTableConfig {
   refreshOnLoad?: boolean; // Default: true
 }
 
+// Pivot table value field configuration
+interface PivotValueConfig {
+  field: string;
+  aggregation?: AggregationType;
+  name?: string;
+  numberFormat?: string;
+}
+
 type AggregationType = 'sum' | 'count' | 'average' | 'min' | 'max';
 type PivotSortOrder = 'asc' | 'desc';
+
 interface PivotFieldFilter {
-  include?: string[];
-  exclude?: string[];
+  include?: string[]; // Show only these values
+  exclude?: string[]; // Hide these values (cannot use with include)
 }
 ```
 
