@@ -13,7 +13,8 @@ export class PivotCache {
   private _records: CellValue[][] = [];
   private _recordCount = 0;
   private _refreshOnLoad = true; // Default to true
-  private _dateGrouping = false;
+  // Optimized lookup: Map<fieldIndex, Map<stringValue, sharedItemsIndex>>
+  private _sharedItemsIndexMap: Map<number, Map<string, number>> = new Map();
 
   constructor(cacheId: number, sourceSheet: string, sourceRange: string) {
     this._cacheId = cacheId;
@@ -96,6 +97,9 @@ export class PivotCache {
       maxValue: undefined,
     }));
 
+    // Use Sets for O(1) unique value collection during analysis
+    const sharedItemsSets: Set<string>[] = this._fields.map(() => new Set<string>());
+
     // Analyze data to determine field types and collect unique values
     for (const row of data) {
       for (let colIdx = 0; colIdx < row.length && colIdx < this._fields.length; colIdx++) {
@@ -108,9 +112,8 @@ export class PivotCache {
 
         if (typeof value === 'string') {
           field.isNumeric = false;
-          if (!field.sharedItems.includes(value)) {
-            field.sharedItems.push(value);
-          }
+          // O(1) Set.add instead of O(n) Array.includes + push
+          sharedItemsSets[colIdx].add(value);
         } else if (typeof value === 'number') {
           if (field.minValue === undefined || value < field.minValue) {
             field.minValue = value;
@@ -127,8 +130,24 @@ export class PivotCache {
       }
     }
 
-    // Enable date grouping flag if any date field exists
-    this._dateGrouping = this._fields.some((field) => field.isDate);
+    // Convert Sets to arrays and build reverse index Maps for O(1) lookup during XML generation
+    this._sharedItemsIndexMap.clear();
+    for (let colIdx = 0; colIdx < this._fields.length; colIdx++) {
+      const field = this._fields[colIdx];
+      const set = sharedItemsSets[colIdx];
+
+      // Convert Set to array (maintains insertion order in ES6+)
+      field.sharedItems = Array.from(set);
+
+      // Build reverse lookup Map: value -> index
+      if (field.sharedItems.length > 0) {
+        const indexMap = new Map<string, number>();
+        for (let i = 0; i < field.sharedItems.length; i++) {
+          indexMap.set(field.sharedItems[i], i);
+        }
+        this._sharedItemsIndexMap.set(colIdx, indexMap);
+      }
+    }
 
     // Store records
     this._records = data;
@@ -164,8 +183,6 @@ export class PivotCache {
         for (const item of field.sharedItems) {
           sharedItemChildren.push(createElement('s', { v: item }, []));
         }
-      } else if (field.isDate) {
-        sharedItemsAttrs.containsDate = '1';
       } else if (field.isNumeric) {
         // Numeric field - use "0"/"1" for boolean attributes as Excel expects
         sharedItemsAttrs.containsSemiMixedTypes = '0';
@@ -193,11 +210,7 @@ export class PivotCache {
       { ref: this._sourceRange, sheet: this._sourceSheet },
       [],
     );
-    const cacheSourceAttrs: Record<string, string> = { type: 'worksheet' };
-    if (this._dateGrouping) {
-      cacheSourceAttrs.grouping = '1';
-    }
-    const cacheSourceNode = createElement('cacheSource', cacheSourceAttrs, [worksheetSourceNode]);
+    const cacheSourceNode = createElement('cacheSource', { type: 'worksheet' }, [worksheetSourceNode]);
 
     // Build attributes - refreshOnLoad should come early per OOXML schema
     const definitionAttrs: Record<string, string> = {
@@ -233,16 +246,16 @@ export class PivotCache {
       const fieldNodes: XmlNode[] = [];
 
       for (let colIdx = 0; colIdx < this._fields.length; colIdx++) {
-        const field = this._fields[colIdx];
         const value = colIdx < row.length ? row[colIdx] : null;
 
         if (value === null || value === undefined) {
           // Missing value
           fieldNodes.push(createElement('m', {}, []));
         } else if (typeof value === 'string') {
-          // String value - use index into sharedItems
-          const idx = field.sharedItems.indexOf(value);
-          if (idx >= 0) {
+          // String value - use index into sharedItems via O(1) Map lookup
+          const indexMap = this._sharedItemsIndexMap.get(colIdx);
+          const idx = indexMap?.get(value);
+          if (idx !== undefined) {
             fieldNodes.push(createElement('x', { v: String(idx) }, []));
           } else {
             // Direct string value (shouldn't happen if cache is built correctly)

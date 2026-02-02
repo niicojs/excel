@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach } from 'vitest';
 import { Workbook } from '../src';
+import { Styles } from '../src/styles';
 
 describe('PivotTable', () => {
   let wb: Workbook;
@@ -169,6 +170,45 @@ describe('PivotTable', () => {
       expect(pivot.name).toBe('SalesPivot');
     });
 
+    it('adds value fields using object config', () => {
+      const pivot = wb
+        .createPivotTable({
+          name: 'SalesPivot',
+          source: 'Sheet1!A1:D7',
+          target: 'PivotSheet!A3',
+        })
+        .addValueField({ field: 'Sales', aggregation: 'sum', name: 'Total Sales' });
+
+      expect(pivot.name).toBe('SalesPivot');
+    });
+
+    it('adds value fields with object config and number format', () => {
+      const pivot = wb
+        .createPivotTable({
+          name: 'SalesPivot',
+          source: 'Sheet1!A1:D7',
+          target: 'PivotSheet!A3',
+        })
+        .addValueField({ field: 'Sales', aggregation: 'sum', name: 'Total', numberFormat: '$#,##0.00' });
+
+      const xml = pivot.toXml();
+      expect(xml).toContain('numFmtId=');
+    });
+
+    it('adds value fields with object config using defaults', () => {
+      const pivot = wb
+        .createPivotTable({
+          name: 'SalesPivot',
+          source: 'Sheet1!A1:D7',
+          target: 'PivotSheet!A3',
+        })
+        .addValueField({ field: 'Sales' }); // Only field is required
+
+      const xml = pivot.toXml();
+      expect(xml).toContain('Sum of Sales'); // Default name
+      expect(xml).toContain('subtotal="sum"'); // Default aggregation
+    });
+
     it('adds filter fields', () => {
       const pivot = wb
         .createPivotTable({
@@ -311,5 +351,144 @@ describe('PivotTable', () => {
       const buffer = await wb.toBuffer();
       expect(buffer).toBeInstanceOf(Uint8Array);
     });
+  });
+
+  describe('value field number format', () => {
+    it('adds value field with number format', () => {
+      const pivot = wb
+        .createPivotTable({
+          name: 'SalesPivot',
+          source: 'Sheet1!A1:D7',
+          target: 'PivotSheet!A3',
+        })
+        .addRowField('Region')
+        .addValueField('Sales', 'sum', 'Total Sales', '$#,##0.00');
+
+      expect(pivot.name).toBe('SalesPivot');
+    });
+
+    it('includes numFmtId in XML for custom formats', () => {
+      const pivot = wb
+        .createPivotTable({
+          name: 'SalesPivot',
+          source: 'Sheet1!A1:D7',
+          target: 'PivotSheet!A3',
+        })
+        .addRowField('Region')
+        .addValueField('Sales', 'sum', 'Total Sales', '$#,##0.00');
+
+      const xml = pivot.toXml();
+      // Custom format should get ID >= 164
+      expect(xml).toMatch(/numFmtId="\d+"/);
+      expect(xml).toContain('applyNumberFormats="1"');
+    });
+
+    it('uses built-in format ID for standard formats', () => {
+      const pivot = wb
+        .createPivotTable({
+          name: 'SalesPivot',
+          source: 'Sheet1!A1:D7',
+          target: 'PivotSheet!A3',
+        })
+        .addRowField('Region')
+        .addValueField('Sales', 'sum', 'Total Sales', '#,##0.00');
+
+      const xml = pivot.toXml();
+      // #,##0.00 is built-in format ID 4
+      expect(xml).toContain('numFmtId="4"');
+    });
+
+    it('sets applyNumberFormats to 0 when no formats specified', () => {
+      const pivot = wb
+        .createPivotTable({
+          name: 'SalesPivot',
+          source: 'Sheet1!A1:D7',
+          target: 'PivotSheet!A3',
+        })
+        .addRowField('Region')
+        .addValueField('Sales', 'sum', 'Total Sales');
+
+      const xml = pivot.toXml();
+      expect(xml).toContain('applyNumberFormats="0"');
+    });
+
+    it('supports multiple value fields with different formats', async () => {
+      wb.createPivotTable({
+        name: 'SalesPivot',
+        source: 'Sheet1!A1:D7',
+        target: 'PivotSheet!A3',
+      })
+        .addRowField('Region')
+        .addValueField('Sales', 'sum', 'Total Sales', '$#,##0.00')
+        .addValueField('Quantity', 'average', 'Avg Qty', '0.00');
+
+      const buffer = await wb.toBuffer();
+      expect(buffer).toBeInstanceOf(Uint8Array);
+      expect(buffer.length).toBeGreaterThan(0);
+    });
+  });
+});
+
+describe('Styles built-in number formats', () => {
+  it('returns built-in ID for General format', () => {
+    const styles = Styles.createDefault();
+    expect(styles.getOrCreateNumFmtId('General')).toBe(0);
+  });
+
+  it('returns built-in ID for 0 format', () => {
+    const styles = Styles.createDefault();
+    expect(styles.getOrCreateNumFmtId('0')).toBe(1);
+  });
+
+  it('returns built-in ID for 0.00 format', () => {
+    const styles = Styles.createDefault();
+    expect(styles.getOrCreateNumFmtId('0.00')).toBe(2);
+  });
+
+  it('returns built-in ID for #,##0 format', () => {
+    const styles = Styles.createDefault();
+    expect(styles.getOrCreateNumFmtId('#,##0')).toBe(3);
+  });
+
+  it('returns built-in ID for #,##0.00 format', () => {
+    const styles = Styles.createDefault();
+    expect(styles.getOrCreateNumFmtId('#,##0.00')).toBe(4);
+  });
+
+  it('returns built-in ID for percentage formats', () => {
+    const styles = Styles.createDefault();
+    expect(styles.getOrCreateNumFmtId('0%')).toBe(9);
+    expect(styles.getOrCreateNumFmtId('0.00%')).toBe(10);
+  });
+
+  it('returns built-in ID for date formats', () => {
+    const styles = Styles.createDefault();
+    expect(styles.getOrCreateNumFmtId('mm-dd-yy')).toBe(14);
+    expect(styles.getOrCreateNumFmtId('d-mmm-yy')).toBe(15);
+  });
+
+  it('returns built-in ID for text format', () => {
+    const styles = Styles.createDefault();
+    expect(styles.getOrCreateNumFmtId('@')).toBe(49);
+  });
+
+  it('creates custom ID for non-built-in formats', () => {
+    const styles = Styles.createDefault();
+    const id = styles.getOrCreateNumFmtId('$#,##0.00');
+    expect(id).toBeGreaterThanOrEqual(164);
+  });
+
+  it('reuses custom ID for same format', () => {
+    const styles = Styles.createDefault();
+    const id1 = styles.getOrCreateNumFmtId('$#,##0.00');
+    const id2 = styles.getOrCreateNumFmtId('$#,##0.00');
+    expect(id1).toBe(id2);
+  });
+
+  it('creates different IDs for different custom formats', () => {
+    const styles = Styles.createDefault();
+    const id1 = styles.getOrCreateNumFmtId('$#,##0.00');
+    const id2 = styles.getOrCreateNumFmtId('€#,##0.00');
+    expect(id1).not.toBe(id2);
   });
 });

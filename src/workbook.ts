@@ -511,6 +511,10 @@ export class Workbook {
       targetAddr.col,
       pivotTableIndex,
     );
+
+    // Set styles reference for number format resolution
+    pivotTable.setStyles(this._styles);
+
     this._pivotTables.push(pivotTable);
 
     return pivotTable;
