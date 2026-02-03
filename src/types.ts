@@ -226,6 +226,52 @@ export interface RichCellValue {
 }
 
 /**
+ * Configuration for creating an Excel Table (ListObject)
+ */
+export interface TableConfig {
+  /** Table name (must be unique within the workbook) */
+  name: string;
+  /** Data range including headers (e.g., "A1:D10") */
+  range: string;
+  /** First row contains headers (default: true) */
+  headerRow?: boolean;
+  /** Show total row at the bottom (default: false) */
+  totalRow?: boolean;
+  /** Table style configuration */
+  style?: TableStyleConfig;
+}
+
+/**
+ * Table style configuration options
+ */
+export interface TableStyleConfig {
+  /** Built-in table style name (e.g., "TableStyleMedium2", "TableStyleLight1") */
+  name?: string;
+  /** Show banded/alternating row colors (default: true) */
+  showRowStripes?: boolean;
+  /** Show banded/alternating column colors (default: false) */
+  showColumnStripes?: boolean;
+  /** Highlight first column with special formatting (default: false) */
+  showFirstColumn?: boolean;
+  /** Highlight last column with special formatting (default: false) */
+  showLastColumn?: boolean;
+}
+
+/**
+ * Aggregation functions available for table total row
+ */
+export type TableTotalFunction =
+  | 'sum'
+  | 'count'
+  | 'average'
+  | 'min'
+  | 'max'
+  | 'stdDev'
+  | 'var'
+  | 'countNums'
+  | 'none';
+
+/**
  * Configuration for converting a sheet to JSON objects.
  */
 export interface SheetToJsonConfig {

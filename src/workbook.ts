@@ -35,6 +35,9 @@ export class Workbook {
   private _pivotCaches: PivotCache[] = [];
   private _nextCacheId = 0;
 
+  // Table support
+  private _nextTableId = 1;
+
   // Date serialization handling
   private _dateHandling: DateHandling = 'jsDate';
 
@@ -135,6 +138,15 @@ export class Workbook {
    */
   set dateHandling(value: DateHandling) {
     this._dateHandling = value;
+  }
+
+  /**
+   * Get the next unique table ID for this workbook.
+   * Table IDs must be unique across all worksheets.
+   * @internal
+   */
+  getNextTableId(): number {
+    return this._nextTableId++;
   }
 
   /**
@@ -659,6 +671,9 @@ export class Workbook {
     if (this._pivotTables.length > 0) {
       this._updatePivotTableFiles();
     }
+
+    // Update tables
+    this._updateTableFiles();
   }
 
   private _updateWorkbookXml(): void {
@@ -859,6 +874,27 @@ export class Workbook {
       );
     }
 
+    // Add tables
+    let tableIndex = 1;
+    for (const def of this._sheetDefs) {
+      const worksheet = this._sheets.get(def.name);
+      if (worksheet) {
+        for (let i = 0; i < worksheet.tables.length; i++) {
+          types.push(
+            createElement(
+              'Override',
+              {
+                PartName: `/xl/tables/table${tableIndex}.xml`,
+                ContentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.table+xml',
+              },
+              [],
+            ),
+          );
+          tableIndex++;
+        }
+      }
+    }
+
     const typesNode = createElement(
       'Types',
       { xmlns: 'http://schemas.openxmlformats.org/package/2006/content-types' },
@@ -1002,6 +1038,103 @@ export class Workbook {
               Id: `rId${i + 1}`,
               Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotTable',
               Target: `../pivotTables/pivotTable${pt.index}.xml`,
+            },
+            [],
+          ),
+        );
+      }
+
+      const sheetRels = createElement(
+        'Relationships',
+        { xmlns: 'http://schemas.openxmlformats.org/package/2006/relationships' },
+        relNodes,
+      );
+      writeZipText(
+        this._files,
+        sheetRelsPath,
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n${stringifyXml([sheetRels])}`,
+      );
+    }
+  }
+
+  /**
+   * Generate all table related files
+   */
+  private _updateTableFiles(): void {
+    // Collect all tables with their global indices
+    let globalTableIndex = 1;
+    const sheetTables: Map<string, { table: import('./table').Table; globalIndex: number }[]> = new Map();
+
+    for (const def of this._sheetDefs) {
+      const worksheet = this._sheets.get(def.name);
+      if (!worksheet) continue;
+
+      const tables = worksheet.tables;
+      if (tables.length === 0) continue;
+
+      const tableInfos: { table: import('./table').Table; globalIndex: number }[] = [];
+      for (const table of tables) {
+        tableInfos.push({ table, globalIndex: globalTableIndex });
+        globalTableIndex++;
+      }
+      sheetTables.set(def.name, tableInfos);
+    }
+
+    // Generate table files
+    for (const [, tableInfos] of sheetTables) {
+      for (const { table, globalIndex } of tableInfos) {
+        const tablePath = `xl/tables/table${globalIndex}.xml`;
+        writeZipText(this._files, tablePath, table.toXml());
+      }
+    }
+
+    // Generate worksheet relationships for tables
+    for (const [sheetName, tableInfos] of sheetTables) {
+      const def = this._sheetDefs.find((s) => s.name === sheetName);
+      if (!def) continue;
+
+      const rel = this._relationships.find((r) => r.id === def.rId);
+      if (!rel) continue;
+
+      // Extract sheet file name from target path
+      const sheetFileName = rel.target.split('/').pop();
+      const sheetRelsPath = `xl/worksheets/_rels/${sheetFileName}.rels`;
+
+      // Check if there are already pivot table relationships for this sheet
+      const existingRelsXml = readZipText(this._files, sheetRelsPath);
+      let nextRelId = 1;
+      const relNodes: XmlNode[] = [];
+
+      if (existingRelsXml) {
+        // Parse existing rels and find max rId
+        const parsed = parseXml(existingRelsXml);
+        const relsElement = findElement(parsed, 'Relationships');
+        if (relsElement) {
+          const existingRelNodes = getChildren(relsElement, 'Relationships');
+          for (const relNode of existingRelNodes) {
+            if ('Relationship' in relNode) {
+              relNodes.push(relNode);
+              const id = getAttr(relNode, 'Id');
+              if (id) {
+                const idNum = parseInt(id.replace('rId', ''), 10);
+                if (idNum >= nextRelId) {
+                  nextRelId = idNum + 1;
+                }
+              }
+            }
+          }
+        }
+      }
+
+      // Add table relationships
+      for (const { globalIndex } of tableInfos) {
+        relNodes.push(
+          createElement(
+            'Relationship',
+            {
+              Id: `rId${nextRelId++}`,
+              Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/table',
+              Target: `../tables/table${globalIndex}.xml`,
             },
             [],
           ),

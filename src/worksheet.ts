@@ -1,7 +1,8 @@
-import type { CellData, RangeAddress, SheetToJsonConfig, CellValue, DateHandling } from './types';
+import type { CellData, RangeAddress, SheetToJsonConfig, CellValue, DateHandling, TableConfig } from './types';
 import type { Workbook } from './workbook';
 import { Cell, parseCellRef } from './cell';
 import { Range } from './range';
+import { Table } from './table';
 import { parseRange, toAddress, parseAddress, letterToCol } from './utils/address';
 import {
   parseXml,
@@ -30,6 +31,7 @@ export class Worksheet {
   private _frozenPane: { row: number; col: number } | null = null;
   private _dataBoundsCache: { minRow: number; maxRow: number; minCol: number; maxCol: number } | null = null;
   private _boundsDirty = true;
+  private _tables: Table[] = [];
 
   constructor(workbook: Workbook, name: string) {
     this._workbook = workbook;
@@ -409,6 +411,67 @@ export class Worksheet {
   }
 
   /**
+   * Get all tables in the worksheet
+   */
+  get tables(): Table[] {
+    return [...this._tables];
+  }
+
+  /**
+   * Create an Excel Table (ListObject) from a data range.
+   *
+   * Tables provide structured data features like auto-filter, banded styling,
+   * and total row with aggregation functions.
+   *
+   * @param config - Table configuration
+   * @returns Table instance for method chaining
+   *
+   * @example
+   * ```typescript
+   * // Create a table with default styling
+   * const table = sheet.createTable({
+   *   name: 'SalesData',
+   *   range: 'A1:D10',
+   * });
+   *
+   * // Create a table with total row
+   * const table = sheet.createTable({
+   *   name: 'SalesData',
+   *   range: 'A1:D10',
+   *   totalRow: true,
+   *   style: { name: 'TableStyleMedium2' }
+   * });
+   *
+   * table.setTotalFunction('Sales', 'sum');
+   * ```
+   */
+  createTable(config: TableConfig): Table {
+    // Validate table name is unique within the workbook
+    for (const sheet of this._workbook.sheetNames) {
+      const ws = this._workbook.sheet(sheet);
+      for (const table of ws._tables) {
+        if (table.name === config.name) {
+          throw new Error(`Table name already exists: ${config.name}`);
+        }
+      }
+    }
+
+    // Validate table name format (Excel rules: no spaces at start/end, alphanumeric + underscore)
+    if (!config.name || !/^[A-Za-z_\\][A-Za-z0-9_.\\]*$/.test(config.name)) {
+      throw new Error(`Invalid table name: ${config.name}. Names must start with a letter or underscore and contain only alphanumeric characters, underscores, or periods.`);
+    }
+
+    // Create the table with a unique ID from the workbook
+    const tableId = this._workbook.getNextTableId();
+    const table = new Table(this, config, tableId);
+
+    this._tables.push(table);
+    this._dirty = true;
+
+    return table;
+  }
+
+  /**
    * Convert sheet data to an array of JSON objects.
    *
    * @param config - Configuration options
@@ -663,6 +726,17 @@ export class Worksheet {
       }
       const mergeCellsNode = createElement('mergeCells', { count: String(this._mergedCells.size) }, mergeCellNodes);
       worksheetChildren.push(mergeCellsNode);
+    }
+
+    // Add table parts if any tables exist
+    if (this._tables.length > 0) {
+      const tablePartNodes: XmlNode[] = [];
+      for (let i = 0; i < this._tables.length; i++) {
+        // Relationship IDs for tables start at rId1 within the worksheet
+        tablePartNodes.push(createElement('tablePart', { 'r:id': `rId${i + 1}` }, []));
+      }
+      const tablePartsNode = createElement('tableParts', { count: String(this._tables.length) }, tablePartNodes);
+      worksheetChildren.push(tablePartsNode);
     }
 
     const worksheetNode = createElement(
