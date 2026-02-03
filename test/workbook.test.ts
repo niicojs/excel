@@ -548,6 +548,23 @@ describe('Workbook', () => {
       expect(loadedSheet.cell('C3').type).toBe('error');
       expect(loadedSheet.cell('C3').value).toEqual({ error: '#VALUE!' });
     });
+
+    it('preserves theme-based fill colors after save/load', async () => {
+      const wb = Workbook.create();
+      wb.addSheet('Sheet1');
+      const sheet = wb.sheet(0);
+
+      sheet.cell('A1').value = 'Theme';
+      sheet.cell('A1').style = { fillTheme: 2, fillTint: 0.5 };
+
+      const buffer = await wb.toBuffer();
+      const loaded = await Workbook.fromBuffer(buffer);
+      const loadedSheet = loaded.sheet(0);
+
+      const style = loadedSheet.cell('A1').style;
+      expect(style.fillTheme).toBe(2);
+      expect(style.fillTint).toBe(0.5);
+    });
   });
 
   describe('addSheetFromData', () => {
