@@ -53,10 +53,7 @@ async function main() {
   });
 
   // Add total functions to numeric columns
-  table
-    .setTotalFunction('Sales', 'sum')
-    .setTotalFunction('Quantity', 'sum')
-    .setTotalFunction('Unit Price', 'average');
+  table.setTotalFunction('Sales', 'sum').setTotalFunction('Quantity', 'sum').setTotalFunction('Unit Price', 'average');
 
   console.log('Table created:', table.name);
   console.log('Table range:', table.range);

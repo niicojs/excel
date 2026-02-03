@@ -32,6 +32,11 @@ export class Worksheet {
   private _dataBoundsCache: { minRow: number; maxRow: number; minCol: number; maxCol: number } | null = null;
   private _boundsDirty = true;
   private _tables: Table[] = [];
+  private _preserveXml = false;
+  private _tableRelIds: string[] | null = null;
+  private _sheetViewsDirty = false;
+  private _colsDirty = false;
+  private _tablePartsDirty = false;
 
   constructor(workbook: Workbook, name: string) {
     this._workbook = workbook;
@@ -65,6 +70,7 @@ export class Worksheet {
    */
   parse(xml: string): void {
     this._xmlNodes = parseXml(xml);
+    this._preserveXml = true;
     const worksheet = findElement(this._xmlNodes, 'worksheet');
     if (!worksheet) return;
 
@@ -355,6 +361,7 @@ export class Worksheet {
     }
 
     this._columnWidths.set(colIndex, width);
+    this._colsDirty = true;
     this._dirty = true;
   }
 
@@ -378,6 +385,7 @@ export class Worksheet {
     }
 
     this._rowHeights.set(row, height);
+    this._colsDirty = true;
     this._dirty = true;
   }
 
@@ -400,6 +408,7 @@ export class Worksheet {
     } else {
       this._frozenPane = { row: rowSplit, col: colSplit };
     }
+    this._sheetViewsDirty = true;
     this._dirty = true;
   }
 
@@ -415,6 +424,31 @@ export class Worksheet {
    */
   get tables(): Table[] {
     return [...this._tables];
+  }
+
+  /**
+   * Get column width entries
+   * @internal
+   */
+  getColumnWidths(): Map<number, number> {
+    return new Map(this._columnWidths);
+  }
+
+  /**
+   * Get row height entries
+   * @internal
+   */
+  getRowHeights(): Map<number, number> {
+    return new Map(this._rowHeights);
+  }
+
+  /**
+   * Set table relationship IDs for tableParts generation.
+   * @internal
+   */
+  setTableRelIds(ids: string[] | null): void {
+    this._tableRelIds = ids ? [...ids] : null;
+    this._tablePartsDirty = true;
   }
 
   /**
@@ -458,7 +492,9 @@ export class Worksheet {
 
     // Validate table name format (Excel rules: no spaces at start/end, alphanumeric + underscore)
     if (!config.name || !/^[A-Za-z_\\][A-Za-z0-9_.\\]*$/.test(config.name)) {
-      throw new Error(`Invalid table name: ${config.name}. Names must start with a letter or underscore and contain only alphanumeric characters, underscores, or periods.`);
+      throw new Error(
+        `Invalid table name: ${config.name}. Names must start with a letter or underscore and contain only alphanumeric characters, underscores, or periods.`,
+      );
     }
 
     // Create the table with a unique ID from the workbook
@@ -466,6 +502,7 @@ export class Worksheet {
     const table = new Table(this, config, tableId);
 
     this._tables.push(table);
+    this._tablePartsDirty = true;
     this._dirty = true;
 
     return table;
@@ -620,46 +657,9 @@ export class Worksheet {
    * Generate XML for this worksheet
    */
   toXml(): string {
+    const preserved = this._preserveXml && this._xmlNodes ? this._buildPreservedWorksheet() : null;
     // Build sheetData from cells
-    const rowMap = new Map<number, Cell[]>();
-    for (const cell of this._cells.values()) {
-      const row = cell.row;
-      if (!rowMap.has(row)) {
-        rowMap.set(row, []);
-      }
-      rowMap.get(row)!.push(cell);
-    }
-
-    for (const rowIdx of this._rowHeights.keys()) {
-      if (!rowMap.has(rowIdx)) {
-        rowMap.set(rowIdx, []);
-      }
-    }
-
-    // Sort rows and cells
-    const sortedRows = Array.from(rowMap.entries()).sort((a, b) => a[0] - b[0]);
-
-    const rowNodes: XmlNode[] = [];
-    for (const [rowIdx, cells] of sortedRows) {
-      cells.sort((a, b) => a.col - b.col);
-
-      const cellNodes: XmlNode[] = [];
-      for (const cell of cells) {
-        const cellNode = this._buildCellNode(cell);
-        cellNodes.push(cellNode);
-      }
-
-      const rowAttrs: Record<string, string> = { r: String(rowIdx + 1) };
-      const rowHeight = this._rowHeights.get(rowIdx);
-      if (rowHeight !== undefined) {
-        rowAttrs.ht = String(rowHeight);
-        rowAttrs.customHeight = '1';
-      }
-      const rowNode = createElement('row', rowAttrs, cellNodes);
-      rowNodes.push(rowNode);
-    }
-
-    const sheetDataNode = createElement('sheetData', {}, rowNodes);
+    const sheetDataNode = this._buildSheetDataNode();
 
     // Build worksheet structure
     const worksheetChildren: XmlNode[] = [];
@@ -729,13 +729,8 @@ export class Worksheet {
     }
 
     // Add table parts if any tables exist
-    if (this._tables.length > 0) {
-      const tablePartNodes: XmlNode[] = [];
-      for (let i = 0; i < this._tables.length; i++) {
-        // Relationship IDs for tables start at rId1 within the worksheet
-        tablePartNodes.push(createElement('tablePart', { 'r:id': `rId${i + 1}` }, []));
-      }
-      const tablePartsNode = createElement('tableParts', { count: String(this._tables.length) }, tablePartNodes);
+    const tablePartsNode = this._buildTablePartsNode();
+    if (tablePartsNode) {
       worksheetChildren.push(tablePartsNode);
     }
 
@@ -748,7 +743,167 @@ export class Worksheet {
       worksheetChildren,
     );
 
+    if (preserved) {
+      return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n${stringifyXml([preserved])}`;
+    }
+
     return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n${stringifyXml([worksheetNode])}`;
+  }
+
+  private _buildSheetDataNode(): XmlNode {
+    const rowMap = new Map<number, Cell[]>();
+    for (const cell of this._cells.values()) {
+      const row = cell.row;
+      if (!rowMap.has(row)) {
+        rowMap.set(row, []);
+      }
+      rowMap.get(row)!.push(cell);
+    }
+
+    for (const rowIdx of this._rowHeights.keys()) {
+      if (!rowMap.has(rowIdx)) {
+        rowMap.set(rowIdx, []);
+      }
+    }
+
+    const sortedRows = Array.from(rowMap.entries()).sort((a, b) => a[0] - b[0]);
+    const rowNodes: XmlNode[] = [];
+    for (const [rowIdx, cells] of sortedRows) {
+      cells.sort((a, b) => a.col - b.col);
+
+      const cellNodes: XmlNode[] = [];
+      for (const cell of cells) {
+        const cellNode = this._buildCellNode(cell);
+        cellNodes.push(cellNode);
+      }
+
+      const rowAttrs: Record<string, string> = { r: String(rowIdx + 1) };
+      const rowHeight = this._rowHeights.get(rowIdx);
+      if (rowHeight !== undefined) {
+        rowAttrs.ht = String(rowHeight);
+        rowAttrs.customHeight = '1';
+      }
+      const rowNode = createElement('row', rowAttrs, cellNodes);
+      rowNodes.push(rowNode);
+    }
+
+    return createElement('sheetData', {}, rowNodes);
+  }
+
+  private _buildSheetViewsNode(): XmlNode | null {
+    if (!this._frozenPane) return null;
+    const paneAttrs: Record<string, string> = { state: 'frozen' };
+    const topLeftCell = toAddress(this._frozenPane.row, this._frozenPane.col);
+    paneAttrs.topLeftCell = topLeftCell;
+    if (this._frozenPane.col > 0) {
+      paneAttrs.xSplit = String(this._frozenPane.col);
+    }
+    if (this._frozenPane.row > 0) {
+      paneAttrs.ySplit = String(this._frozenPane.row);
+    }
+
+    let activePane = 'bottomRight';
+    if (this._frozenPane.row > 0 && this._frozenPane.col === 0) {
+      activePane = 'bottomLeft';
+    } else if (this._frozenPane.row === 0 && this._frozenPane.col > 0) {
+      activePane = 'topRight';
+    }
+
+    paneAttrs.activePane = activePane;
+    const paneNode = createElement('pane', paneAttrs, []);
+    const selectionNode = createElement(
+      'selection',
+      { pane: activePane, activeCell: topLeftCell, sqref: topLeftCell },
+      [],
+    );
+
+    const sheetViewNode = createElement('sheetView', { workbookViewId: '0' }, [paneNode, selectionNode]);
+    return createElement('sheetViews', {}, [sheetViewNode]);
+  }
+
+  private _buildColsNode(): XmlNode | null {
+    if (this._columnWidths.size === 0) return null;
+    const colNodes: XmlNode[] = [];
+    const entries = Array.from(this._columnWidths.entries()).sort((a, b) => a[0] - b[0]);
+    for (const [colIndex, width] of entries) {
+      colNodes.push(
+        createElement(
+          'col',
+          {
+            min: String(colIndex + 1),
+            max: String(colIndex + 1),
+            width: String(width),
+            customWidth: '1',
+          },
+          [],
+        ),
+      );
+    }
+    return createElement('cols', {}, colNodes);
+  }
+
+  private _buildMergeCellsNode(): XmlNode | null {
+    if (this._mergedCells.size === 0) return null;
+    const mergeCellNodes: XmlNode[] = [];
+    for (const ref of this._mergedCells) {
+      mergeCellNodes.push(createElement('mergeCell', { ref }, []));
+    }
+    return createElement('mergeCells', { count: String(this._mergedCells.size) }, mergeCellNodes);
+  }
+
+  private _buildTablePartsNode(): XmlNode | null {
+    if (this._tables.length === 0) return null;
+    const tablePartNodes: XmlNode[] = [];
+    for (let i = 0; i < this._tables.length; i++) {
+      const relId =
+        this._tableRelIds && this._tableRelIds.length === this._tables.length ? this._tableRelIds[i] : `rId${i + 1}`;
+      tablePartNodes.push(createElement('tablePart', { 'r:id': relId }, []));
+    }
+    return createElement('tableParts', { count: String(this._tables.length) }, tablePartNodes);
+  }
+
+  private _buildPreservedWorksheet(): XmlNode | null {
+    if (!this._xmlNodes) return null;
+    const worksheet = findElement(this._xmlNodes, 'worksheet');
+    if (!worksheet) return null;
+
+    const children = getChildren(worksheet, 'worksheet');
+
+    const upsertChild = (tag: string, node: XmlNode | null) => {
+      const existingIndex = children.findIndex((child) => tag in child);
+      if (node) {
+        if (existingIndex >= 0) {
+          children[existingIndex] = node;
+        } else {
+          children.push(node);
+        }
+      } else if (existingIndex >= 0) {
+        children.splice(existingIndex, 1);
+      }
+    };
+
+    if (this._sheetViewsDirty) {
+      const sheetViewsNode = this._buildSheetViewsNode();
+      upsertChild('sheetViews', sheetViewsNode);
+    }
+
+    if (this._colsDirty) {
+      const colsNode = this._buildColsNode();
+      upsertChild('cols', colsNode);
+    }
+
+    const sheetDataNode = this._buildSheetDataNode();
+    upsertChild('sheetData', sheetDataNode);
+
+    const mergeCellsNode = this._buildMergeCellsNode();
+    upsertChild('mergeCells', mergeCellsNode);
+
+    if (this._tablePartsDirty) {
+      const tablePartsNode = this._buildTablePartsNode();
+      upsertChild('tableParts', tablePartsNode);
+    }
+
+    return worksheet;
   }
 
   /**

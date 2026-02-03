@@ -42,20 +42,24 @@ export class Table {
   private _displayName: string;
   private _worksheet: Worksheet;
   private _range: RangeAddress;
+  private _baseRange: RangeAddress;
   private _totalRow: boolean;
   private _autoFilter: boolean;
   private _style: TableStyleConfig;
   private _columns: TableColumn[] = [];
   private _id: number;
   private _dirty = true;
+  private _headerRow: boolean;
 
   constructor(worksheet: Worksheet, config: TableConfig, tableId: number) {
     this._worksheet = worksheet;
     this._name = config.name;
     this._displayName = config.name;
     this._range = parseRange(config.range);
+    this._baseRange = { start: { ...this._range.start }, end: { ...this._range.end } };
     this._totalRow = config.totalRow === true; // Default false
     this._autoFilter = true; // Tables have auto-filter by default
+    this._headerRow = config.headerRow !== false;
     this._id = tableId;
 
     // Expand range to include total row if enabled
@@ -112,6 +116,13 @@ export class Table {
   }
 
   /**
+   * Get the base range excluding total row
+   */
+  get baseRange(): string {
+    return toRange(this._baseRange);
+  }
+
+  /**
    * Get the table range as RangeAddress
    */
   get rangeAddress(): RangeAddress {
@@ -130,6 +141,13 @@ export class Table {
    */
   get hasTotalRow(): boolean {
     return this._totalRow;
+  }
+
+  /**
+   * Check if table has a header row
+   */
+  get hasHeaderRow(): boolean {
+    return this._headerRow;
   }
 
   /**
@@ -179,6 +197,14 @@ export class Table {
   }
 
   /**
+   * Get total function for a column if set
+   */
+  getTotalFunction(columnName: string): TableTotalFunction | undefined {
+    const column = this._columns.find((c) => c.name === columnName);
+    return column?.totalFunction;
+  }
+
+  /**
    * Enable or disable auto-filter
    * @param enabled - Whether auto-filter should be enabled
    * @returns this for method chaining
@@ -216,11 +242,10 @@ export class Table {
     this._dirty = true;
 
     if (enabled) {
-      // Expand range to include total row
+      this._range = { start: { ...this._baseRange.start }, end: { ...this._baseRange.end } };
       this._range.end.row++;
     } else {
-      // Contract range to exclude total row (if it was added)
-      // Clear total functions
+      this._range = { start: { ...this._baseRange.start }, end: { ...this._baseRange.end } };
       for (const col of this._columns) {
         col.totalFunction = undefined;
       }
@@ -238,7 +263,7 @@ export class Table {
     const endCol = this._range.end.col;
 
     for (let col = startCol; col <= endCol; col++) {
-      const cell = this._worksheet.getCellIfExists(headerRow, col);
+      const cell = this._headerRow ? this._worksheet.getCellIfExists(headerRow, col) : undefined;
       const value = cell?.value;
       const name = value != null ? String(value) : `Column${col - startCol + 1}`;
 
@@ -332,6 +357,10 @@ export class Table {
       displayName: this._displayName,
       ref: tableRef,
     };
+
+    if (!this._headerRow) {
+      tableAttrs.headerRowCount = '0';
+    }
 
     if (this._totalRow) {
       tableAttrs.totalsRowCount = '1';

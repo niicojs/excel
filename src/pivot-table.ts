@@ -35,6 +35,7 @@ export class PivotTable {
   private _fieldAssignments: Map<number, FieldAssignment> = new Map();
 
   private _pivotTableIndex: number;
+  private _cacheFileIndex: number;
   private _styles: Styles | null = null;
 
   constructor(
@@ -45,6 +46,7 @@ export class PivotTable {
     targetRow: number,
     targetCol: number,
     pivotTableIndex: number,
+    cacheFileIndex: number,
   ) {
     this._name = name;
     this._cache = cache;
@@ -53,6 +55,7 @@ export class PivotTable {
     this._targetRow = targetRow;
     this._targetCol = targetCol;
     this._pivotTableIndex = pivotTableIndex;
+    this._cacheFileIndex = cacheFileIndex;
   }
 
   /**
@@ -88,6 +91,14 @@ export class PivotTable {
    */
   get index(): number {
     return this._pivotTableIndex;
+  }
+
+  /**
+   * Get the pivot cache file index used for rels.
+   * @internal
+   */
+  get cacheFileIndex(): number {
+    return this._cacheFileIndex;
   }
 
   /**

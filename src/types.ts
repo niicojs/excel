@@ -33,7 +33,17 @@ export interface CellStyle {
   fontSize?: number;
   fontName?: string;
   fontColor?: string;
+  fontColorTheme?: number;
+  fontColorTint?: number;
+  fontColorIndexed?: number;
   fill?: string;
+  fillTheme?: number;
+  fillTint?: number;
+  fillIndexed?: number;
+  fillBgColor?: string;
+  fillBgTheme?: number;
+  fillBgTint?: number;
+  fillBgIndexed?: number;
   border?: BorderStyle;
   alignment?: Alignment;
   numberFormat?: string;
@@ -260,16 +270,7 @@ export interface TableStyleConfig {
 /**
  * Aggregation functions available for table total row
  */
-export type TableTotalFunction =
-  | 'sum'
-  | 'count'
-  | 'average'
-  | 'min'
-  | 'max'
-  | 'stdDev'
-  | 'var'
-  | 'countNums'
-  | 'none';
+export type TableTotalFunction = 'sum' | 'count' | 'average' | 'min' | 'max' | 'stdDev' | 'var' | 'countNums' | 'none';
 
 /**
  * Configuration for converting a sheet to JSON objects.

@@ -7,6 +7,7 @@ import { createElement, stringifyXml, XmlNode } from './utils/xml';
  */
 export class PivotCache {
   private _cacheId: number;
+  private _fileIndex: number;
   private _sourceSheet: string;
   private _sourceRange: string;
   private _fields: PivotCacheField[] = [];
@@ -16,8 +17,9 @@ export class PivotCache {
   // Optimized lookup: Map<fieldIndex, Map<stringValue, sharedItemsIndex>>
   private _sharedItemsIndexMap: Map<number, Map<string, number>> = new Map();
 
-  constructor(cacheId: number, sourceSheet: string, sourceRange: string) {
+  constructor(cacheId: number, sourceSheet: string, sourceRange: string, fileIndex: number) {
     this._cacheId = cacheId;
+    this._fileIndex = fileIndex;
     this._sourceSheet = sourceSheet;
     this._sourceRange = sourceRange;
   }
@@ -27,6 +29,13 @@ export class PivotCache {
    */
   get cacheId(): number {
     return this._cacheId;
+  }
+
+  /**
+   * Get the file index for this cache (used for file naming).
+   */
+  get fileIndex(): number {
+    return this._fileIndex;
   }
 
   /**

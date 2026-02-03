@@ -63,6 +63,13 @@ const normalizeColor = (color: string): string => {
   return c;
 };
 
+interface StyleColor {
+  rgb?: string;
+  theme?: string;
+  tint?: string;
+  indexed?: string;
+}
+
 /**
  * Manages the styles (xl/styles.xml)
  */
@@ -98,7 +105,17 @@ export class Styles {
       style.fontSize?.toString() ?? '',
       style.fontName ?? '',
       style.fontColor ?? '',
+      style.fontColorTheme?.toString() ?? '',
+      style.fontColorTint?.toString() ?? '',
+      style.fontColorIndexed?.toString() ?? '',
       style.fill ?? '',
+      style.fillTheme?.toString() ?? '',
+      style.fillTint?.toString() ?? '',
+      style.fillIndexed?.toString() ?? '',
+      style.fillBgColor ?? '',
+      style.fillBgTheme?.toString() ?? '',
+      style.fillBgTint?.toString() ?? '',
+      style.fillBgIndexed?.toString() ?? '',
       style.numberFormat ?? '',
     ];
 
@@ -243,7 +260,18 @@ export class Styles {
       if ('sz' in child) font.size = parseFloat(getAttr(child, 'val') || '11');
       if ('name' in child) font.name = getAttr(child, 'val');
       if ('color' in child) {
-        font.color = getAttr(child, 'rgb') || getAttr(child, 'theme');
+        const color: StyleColor = {};
+        const rgb = getAttr(child, 'rgb');
+        const theme = getAttr(child, 'theme');
+        const tint = getAttr(child, 'tint');
+        const indexed = getAttr(child, 'indexed');
+        if (rgb) color.rgb = rgb;
+        if (theme) color.theme = theme;
+        if (tint) color.tint = tint;
+        if (indexed) color.indexed = indexed;
+        if (color.rgb || color.theme || color.tint || color.indexed) {
+          font.color = color;
+        }
       }
     }
 
@@ -262,10 +290,32 @@ export class Styles {
         const pfChildren = getChildren(child, 'patternFill');
         for (const pfChild of pfChildren) {
           if ('fgColor' in pfChild) {
-            fill.fgColor = getAttr(pfChild, 'rgb') || getAttr(pfChild, 'theme');
+            const color: StyleColor = {};
+            const rgb = getAttr(pfChild, 'rgb');
+            const theme = getAttr(pfChild, 'theme');
+            const tint = getAttr(pfChild, 'tint');
+            const indexed = getAttr(pfChild, 'indexed');
+            if (rgb) color.rgb = rgb;
+            if (theme) color.theme = theme;
+            if (tint) color.tint = tint;
+            if (indexed) color.indexed = indexed;
+            if (color.rgb || color.theme || color.tint || color.indexed) {
+              fill.fgColor = color;
+            }
           }
           if ('bgColor' in pfChild) {
-            fill.bgColor = getAttr(pfChild, 'rgb') || getAttr(pfChild, 'theme');
+            const color: StyleColor = {};
+            const rgb = getAttr(pfChild, 'rgb');
+            const theme = getAttr(pfChild, 'theme');
+            const tint = getAttr(pfChild, 'tint');
+            const indexed = getAttr(pfChild, 'indexed');
+            if (rgb) color.rgb = rgb;
+            if (theme) color.theme = theme;
+            if (tint) color.tint = tint;
+            if (indexed) color.indexed = indexed;
+            if (color.rgb || color.theme || color.tint || color.indexed) {
+              fill.bgColor = color;
+            }
           }
         }
       }
@@ -337,11 +387,24 @@ export class Styles {
       if (font.strike) style.strike = true;
       if (font.size) style.fontSize = font.size;
       if (font.name) style.fontName = font.name;
-      if (font.color) style.fontColor = font.color;
+      if (font.color?.rgb) style.fontColor = font.color.rgb;
+      if (font.color?.theme) style.fontColorTheme = Number(font.color.theme);
+      if (font.color?.tint) style.fontColorTint = Number(font.color.tint);
+      if (font.color?.indexed) style.fontColorIndexed = Number(font.color.indexed);
     }
 
     if (fill && fill.fgColor) {
-      style.fill = fill.fgColor;
+      if (fill.fgColor.rgb) style.fill = fill.fgColor.rgb;
+      if (fill.fgColor.theme) style.fillTheme = Number(fill.fgColor.theme);
+      if (fill.fgColor.tint) style.fillTint = Number(fill.fgColor.tint);
+      if (fill.fgColor.indexed) style.fillIndexed = Number(fill.fgColor.indexed);
+    }
+
+    if (fill && fill.bgColor) {
+      if (fill.bgColor.rgb) style.fillBgColor = fill.bgColor.rgb;
+      if (fill.bgColor.theme) style.fillBgTheme = Number(fill.bgColor.theme);
+      if (fill.bgColor.tint) style.fillBgTint = Number(fill.bgColor.tint);
+      if (fill.bgColor.indexed) style.fillBgIndexed = Number(fill.bgColor.indexed);
     }
 
     if (border) {
@@ -431,6 +494,12 @@ export class Styles {
   }
 
   private _findOrCreateFont(style: CellStyle): number {
+    const color = this._toStyleColor(
+      style.fontColor,
+      style.fontColorTheme,
+      style.fontColorTint,
+      style.fontColorIndexed,
+    );
     const font: StyleFont = {
       bold: style.bold || false,
       italic: style.italic || false,
@@ -438,7 +507,7 @@ export class Styles {
       strike: style.strike || false,
       size: style.fontSize,
       name: style.fontName,
-      color: style.fontColor,
+      color,
     };
 
     // Try to find existing font
@@ -451,7 +520,7 @@ export class Styles {
         f.strike === font.strike &&
         f.size === font.size &&
         f.name === font.name &&
-        f.color === font.color
+        this._colorsEqual(f.color, font.color)
       ) {
         return i;
       }
@@ -463,12 +532,15 @@ export class Styles {
   }
 
   private _findOrCreateFill(style: CellStyle): number {
-    if (!style.fill) return 0;
+    const fgColor = this._toStyleColor(style.fill, style.fillTheme, style.fillTint, style.fillIndexed);
+    const bgColor = this._toStyleColor(style.fillBgColor, style.fillBgTheme, style.fillBgTint, style.fillBgIndexed);
+
+    if (!fgColor && !bgColor) return 0;
 
     // Try to find existing fill
     for (let i = 0; i < this._fills.length; i++) {
       const f = this._fills[i];
-      if (f.fgColor === style.fill) {
+      if (this._colorsEqual(f.fgColor, fgColor) && this._colorsEqual(f.bgColor, bgColor)) {
         return i;
       }
     }
@@ -476,7 +548,8 @@ export class Styles {
     // Create new fill
     this._fills.push({
       type: 'solid',
-      fgColor: style.fill,
+      fgColor: fgColor || undefined,
+      bgColor: bgColor || undefined,
     });
     return this._fills.length - 1;
   }
@@ -601,7 +674,16 @@ export class Styles {
     if (font.underline) children.push(createElement('u', {}, []));
     if (font.strike) children.push(createElement('strike', {}, []));
     if (font.size) children.push(createElement('sz', { val: String(font.size) }, []));
-    if (font.color) children.push(createElement('color', { rgb: normalizeColor(font.color) }, []));
+    if (font.color) {
+      const attrs: Record<string, string> = {};
+      if (font.color.rgb) attrs.rgb = normalizeColor(font.color.rgb);
+      if (font.color.theme) attrs.theme = font.color.theme;
+      if (font.color.tint) attrs.tint = font.color.tint;
+      if (font.color.indexed) attrs.indexed = font.color.indexed;
+      if (Object.keys(attrs).length > 0) {
+        children.push(createElement('color', attrs, []));
+      }
+    }
     if (font.name) children.push(createElement('name', { val: font.name }, []));
     return createElement('font', {}, children);
   }
@@ -609,19 +691,49 @@ export class Styles {
   private _buildFillNode(fill: StyleFill): XmlNode {
     const patternChildren: XmlNode[] = [];
     if (fill.fgColor) {
-      const rgb = normalizeColor(fill.fgColor);
-      patternChildren.push(createElement('fgColor', { rgb }, []));
+      const attrs: Record<string, string> = {};
+      if (fill.fgColor.rgb) attrs.rgb = normalizeColor(fill.fgColor.rgb);
+      if (fill.fgColor.theme) attrs.theme = fill.fgColor.theme;
+      if (fill.fgColor.tint) attrs.tint = fill.fgColor.tint;
+      if (fill.fgColor.indexed) attrs.indexed = fill.fgColor.indexed;
+      if (Object.keys(attrs).length > 0) {
+        patternChildren.push(createElement('fgColor', attrs, []));
+      }
       // For solid fills, bgColor is required (indexed 64 = system background)
-      if (fill.type === 'solid') {
+      if (fill.type === 'solid' && !fill.bgColor) {
         patternChildren.push(createElement('bgColor', { indexed: '64' }, []));
       }
     }
-    if (fill.bgColor && fill.type !== 'solid') {
-      const rgb = normalizeColor(fill.bgColor);
-      patternChildren.push(createElement('bgColor', { rgb }, []));
+    if (fill.bgColor) {
+      const attrs: Record<string, string> = {};
+      if (fill.bgColor.rgb) attrs.rgb = normalizeColor(fill.bgColor.rgb);
+      if (fill.bgColor.theme) attrs.theme = fill.bgColor.theme;
+      if (fill.bgColor.tint) attrs.tint = fill.bgColor.tint;
+      if (fill.bgColor.indexed) attrs.indexed = fill.bgColor.indexed;
+      if (Object.keys(attrs).length > 0) {
+        patternChildren.push(createElement('bgColor', attrs, []));
+      }
     }
     const patternFill = createElement('patternFill', { patternType: fill.type || 'none' }, patternChildren);
     return createElement('fill', {}, [patternFill]);
+  }
+
+  private _toStyleColor(rgb?: string, theme?: number, tint?: number, indexed?: number): StyleColor | undefined {
+    if (rgb) {
+      return { rgb };
+    }
+    const color: StyleColor = {};
+    if (theme !== undefined) color.theme = String(theme);
+    if (tint !== undefined) color.tint = String(tint);
+    if (indexed !== undefined) color.indexed = String(indexed);
+    if (color.theme || color.tint || color.indexed) return color;
+    return undefined;
+  }
+
+  private _colorsEqual(a?: StyleColor, b?: StyleColor): boolean {
+    if (!a && !b) return true;
+    if (!a || !b) return false;
+    return a.rgb === b.rgb && a.theme === b.theme && a.tint === b.tint && a.indexed === b.indexed;
   }
 
   private _buildBorderNode(border: StyleBorder): XmlNode {
@@ -675,13 +787,13 @@ interface StyleFont {
   strike: boolean;
   size?: number;
   name?: string;
-  color?: string;
+  color?: StyleColor;
 }
 
 interface StyleFill {
   type: string;
-  fgColor?: string;
-  bgColor?: string;
+  fgColor?: StyleColor;
+  bgColor?: StyleColor;
 }
 
 interface StyleBorder {

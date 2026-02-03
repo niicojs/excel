@@ -255,14 +255,10 @@ Filter field values using include or exclude lists:
 
 ```typescript
 // Include only specific values
-pivot
-  .addRowField('Region')
-  .filterField('Region', { include: ['North', 'South'] });
+pivot.addRowField('Region').filterField('Region', { include: ['North', 'South'] });
 
 // Exclude specific values
-pivot
-  .addColumnField('Product')
-  .filterField('Product', { exclude: ['Discontinued', 'Legacy'] });
+pivot.addColumnField('Product').filterField('Product', { exclude: ['Discontinued', 'Legacy'] });
 ```
 
 ### Value Fields with Number Formats
