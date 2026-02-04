@@ -526,7 +526,7 @@ export class Worksheet {
    * const data = sheet.toJson({ startRow: 2, startCol: 1 });
    * ```
    */
-  toJson<T = Record<string, CellValue>>(config: SheetToJsonConfig = {}): T[] {
+   toJson<T = Record<string, CellValue>>(config: SheetToJsonConfig = {}): T[] {
     const {
       fields,
       startRow = 0,
@@ -536,6 +536,7 @@ export class Worksheet {
       stopOnEmptyRow = true,
       dateHandling = this._workbook.dateHandling,
       asText = false,
+      locale,
     } = config;
 
     // Get the bounds of data in the sheet
@@ -581,7 +582,7 @@ export class Worksheet {
 
         if (asText) {
           // Return formatted text instead of raw value
-          value = cell?.text ?? '';
+          value = cell?.textWithLocale(locale) ?? '';
           if (value !== '') {
             hasData = true;
           }

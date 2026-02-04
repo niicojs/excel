@@ -1352,6 +1352,49 @@ describe('Workbook', () => {
       expect(result[1].Active).toBe('false');
     });
 
+    it('formats numbers and dates with locale when asText is true', () => {
+      const wb = Workbook.create();
+      wb.locale = 'fr-FR';
+      const sheet = wb.addSheet('Test');
+
+      sheet.cell('A1').value = 'Amount';
+      sheet.cell('B1').value = 'Percent';
+      sheet.cell('C1').value = 'Currency';
+      sheet.cell('D1').value = 'Date';
+
+      sheet.cell('A2').value = 1234.5;
+      sheet.cell('A2').style = { numberFormat: '#,##0.00' };
+      sheet.cell('B2').value = 0.256;
+      sheet.cell('B2').style = { numberFormat: '0.00%' };
+      sheet.cell('C2').value = 9876.5;
+      sheet.cell('C2').style = { numberFormat: '€#,##0.00' };
+      sheet.cell('D2').value = new Date(2024, 5, 15, 9, 5, 7);
+      sheet.cell('D2').style = { numberFormat: 'dd/mm/yyyy hh:mm:ss' };
+
+      const result = sheet.toJson({ asText: true });
+
+      expect(result[0].Amount).toBe('1 234,50');
+      expect(result[0].Percent).toBe('25,60%');
+      expect(result[0].Currency).toBe('€9 876,50');
+      expect(result[0].Date).toBe('15/06/2024 09:05:07');
+    });
+
+    it('uses locale override when asText is true', () => {
+      const wb = Workbook.create();
+      wb.locale = 'fr-FR';
+      const sheet = wb.addSheet('Test');
+
+      sheet.cell('A1').value = 'Amount';
+      sheet.cell('A2').value = 1234.5;
+      sheet.cell('A2').style = { numberFormat: '#,##0.00' };
+
+      const frResult = sheet.toJson({ asText: true });
+      const enResult = sheet.toJson({ asText: true, locale: 'en-US' });
+
+      expect(frResult[0].Amount).toBe('1 234,50');
+      expect(enResult[0].Amount).toBe('1,234.50');
+    });
+
     it('still uses raw values when asText is false (default)', () => {
       const wb = Workbook.create();
       const sheet = wb.addSheet('Test');

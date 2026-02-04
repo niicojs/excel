@@ -1,6 +1,7 @@
 import type { CellValue, CellType, CellStyle, CellData, ErrorType } from './types';
 import type { Worksheet } from './worksheet';
 import { parseAddress, toAddress } from './utils/address';
+import { formatCellValue } from './utils/format';
 
 // Excel epoch: December 30, 1899 (accounting for the 1900 leap year bug)
 const EXCEL_EPOCH = new Date(Date.UTC(1899, 11, 30));
@@ -228,12 +229,25 @@ export class Cell {
    * Get the formatted text (as displayed in Excel)
    */
   get text(): string {
+    return this.textWithLocale();
+  }
+
+  /**
+   * Get the formatted text using a specific locale
+   */
+  textWithLocale(locale?: string): string {
     if (this._data.w) {
       return this._data.w;
     }
     const val = this.value;
     if (val === null) return '';
     if (typeof val === 'object' && 'error' in val) return val.error;
+
+    if (val instanceof Date || typeof val === 'number') {
+      const formatted = formatCellValue(val, this.style, locale ?? this._worksheet.workbook.locale);
+      if (formatted !== null) return formatted;
+    }
+
     if (val instanceof Date) return val.toISOString().split('T')[0];
     return String(val);
   }

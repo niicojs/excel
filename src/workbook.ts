@@ -42,6 +42,8 @@ export class Workbook {
   // Date serialization handling
   private _dateHandling: DateHandling = 'jsDate';
 
+  private _locale = 'fr-FR';
+
   private constructor() {
     this._sharedStrings = new SharedStrings();
     this._styles = Styles.createDefault();
@@ -139,6 +141,20 @@ export class Workbook {
    */
   set dateHandling(value: DateHandling) {
     this._dateHandling = value;
+  }
+
+  /**
+   * Get the workbook locale for formatting.
+   */
+  get locale(): string {
+    return this._locale;
+  }
+
+  /**
+   * Set the workbook locale for formatting.
+   */
+  set locale(value: string) {
+    this._locale = value;
   }
 
   /**

@@ -320,4 +320,10 @@ export interface SheetToJsonConfig {
    * All values will be returned as strings. Defaults to false.
    */
   asText?: boolean;
+
+  /**
+   * Locale to use for formatting when asText is true.
+   * Defaults to the workbook locale.
+   */
+  locale?: string;
 }
