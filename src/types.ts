@@ -314,4 +314,10 @@ export interface SheetToJsonConfig {
    * How to serialize Date values. Defaults to 'jsDate'.
    */
   dateHandling?: DateHandling;
+
+  /**
+   * If true, return formatted text (as displayed in Excel) instead of raw values.
+   * All values will be returned as strings. Defaults to false.
+   */
+  asText?: boolean;
 }

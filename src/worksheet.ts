@@ -535,6 +535,7 @@ export class Worksheet {
       endCol,
       stopOnEmptyRow = true,
       dateHandling = this._workbook.dateHandling,
+      asText = false,
     } = config;
 
     // Get the bounds of data in the sheet
@@ -569,20 +570,29 @@ export class Worksheet {
     const result: T[] = [];
 
     for (let row = dataStartRow; row <= effectiveEndRow; row++) {
-      const obj: Record<string, CellValue> = {};
+      const obj: Record<string, CellValue | string> = {};
       let hasData = false;
 
       for (let colOffset = 0; colOffset < fieldNames.length; colOffset++) {
         const col = startCol + colOffset;
         const cell = this._cells.get(toAddress(row, col));
-        let value = cell?.value ?? null;
 
-        if (value instanceof Date) {
-          value = this._serializeDate(value, dateHandling, cell);
-        }
+        let value: CellValue | string;
 
-        if (value !== null) {
-          hasData = true;
+        if (asText) {
+          // Return formatted text instead of raw value
+          value = cell?.text ?? '';
+          if (value !== '') {
+            hasData = true;
+          }
+        } else {
+          value = cell?.value ?? null;
+          if (value instanceof Date) {
+            value = this._serializeDate(value, dateHandling, cell);
+          }
+          if (value !== null) {
+            hasData = true;
+          }
         }
 
         const fieldName = fieldNames[colOffset];

@@ -1291,5 +1291,79 @@ describe('Workbook', () => {
 
       expect(result).toEqual([{ name: 'Alice', age: 30 }]);
     });
+
+    it('returns formatted text when asText is true', () => {
+      const wb = Workbook.create();
+      const sheet = wb.addSheet('Test');
+      sheet.cell('A1').value = 'Name';
+      sheet.cell('B1').value = 'Amount';
+      sheet.cell('A2').value = 'Test';
+      sheet.cell('B2').value = 1234.5;
+
+      const result = sheet.toJson({ asText: true });
+
+      expect(result[0].Name).toBe('Test');
+      expect(result[0].Amount).toBe('1234.5'); // String, not number
+      expect(typeof result[0].Amount).toBe('string');
+    });
+
+    it('returns empty string for null cells when asText is true', () => {
+      const wb = Workbook.create();
+      const sheet = wb.addSheet('Test');
+      sheet.cell('A1').value = 'Name';
+      sheet.cell('B1').value = 'Value';
+      sheet.cell('A2').value = 'Test';
+      // B2 is empty
+
+      const result = sheet.toJson({ asText: true });
+
+      expect(result[0].Name).toBe('Test');
+      expect(result[0].Value).toBe('');
+    });
+
+    it('returns date as formatted string when asText is true', () => {
+      const wb = Workbook.create();
+      const sheet = wb.addSheet('Test');
+      sheet.cell('A1').value = 'Name';
+      sheet.cell('B1').value = 'Date';
+      sheet.cell('A2').value = 'Event';
+      sheet.cell('B2').value = new Date('2024-06-15');
+
+      const result = sheet.toJson({ asText: true });
+
+      expect(result[0].Name).toBe('Event');
+      expect(typeof result[0].Date).toBe('string');
+      expect(result[0].Date).toContain('2024-06-15'); // ISO date string
+    });
+
+    it('returns boolean as string when asText is true', () => {
+      const wb = Workbook.create();
+      const sheet = wb.addSheet('Test');
+      sheet.cell('A1').value = 'Name';
+      sheet.cell('B1').value = 'Active';
+      sheet.cell('A2').value = 'User1';
+      sheet.cell('B2').value = true;
+      sheet.cell('A3').value = 'User2';
+      sheet.cell('B3').value = false;
+
+      const result = sheet.toJson({ asText: true });
+
+      expect(result[0].Active).toBe('true');
+      expect(result[1].Active).toBe('false');
+    });
+
+    it('still uses raw values when asText is false (default)', () => {
+      const wb = Workbook.create();
+      const sheet = wb.addSheet('Test');
+      sheet.cell('A1').value = 'Name';
+      sheet.cell('B1').value = 'Amount';
+      sheet.cell('A2').value = 'Test';
+      sheet.cell('B2').value = 1234.5;
+
+      const result = sheet.toJson(); // asText defaults to false
+
+      expect(result[0].Amount).toBe(1234.5); // Number, not string
+      expect(typeof result[0].Amount).toBe('number');
+    });
   });
 });
