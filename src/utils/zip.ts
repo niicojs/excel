@@ -1,4 +1,4 @@
-import { unzip, zip, strFromU8, strToU8 } from 'fflate';
+import { unzip, zip, zipSync, strFromU8, strToU8 } from 'fflate';
 
 export type ZipFiles = Map<string, Uint8Array>;
 
@@ -29,11 +29,21 @@ export const readZip = (data: Uint8Array): Promise<ZipFiles> => {
  * @returns Promise resolving to ZIP file as Uint8Array
  */
 export const writeZip = (files: ZipFiles): Promise<Uint8Array> => {
-  return new Promise((resolve, reject) => {
-    const zipData: Record<string, Uint8Array> = {};
-    for (const [path, content] of files) {
-      zipData[path] = content;
+  const zipData: Record<string, Uint8Array> = {};
+  for (const [path, content] of files) {
+    zipData[path] = content;
+  }
+
+  const isBun = typeof (globalThis as { Bun?: unknown }).Bun !== 'undefined';
+  if (isBun) {
+    try {
+      return Promise.resolve(zipSync(zipData));
+    } catch (error) {
+      return Promise.reject(error);
     }
+  }
+
+  return new Promise((resolve, reject) => {
     zip(zipData, (err, result) => {
       if (err) {
         reject(err);
