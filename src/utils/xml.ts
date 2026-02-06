@@ -125,11 +125,24 @@ export const createElement = (tagName: string, attrs?: Record<string, string>, c
   if (attrs && Object.keys(attrs).length > 0) {
     const attrObj: Record<string, string> = {};
     for (const [key, value] of Object.entries(attrs)) {
-      attrObj[`@_${key}`] = value;
+      attrObj[`@_${key}`] = shouldEscapeXmlAttr(tagName, key) ? escapeXmlAttr(value) : value;
     }
     node[':@'] = attrObj;
   }
   return node;
+};
+
+const escapeXmlAttr = (value: string): string => {
+  return value
+    .replace(/&/g, '&amp;')
+    .replace(/"/g, '&quot;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/&apos;/g, "'");
+};
+
+const shouldEscapeXmlAttr = (tagName: string, attrName: string): boolean => {
+  return tagName === 's' && attrName === 'v';
 };
 
 /**

@@ -167,6 +167,8 @@ export interface PivotTableConfig {
   target: string;
   /** Refresh the pivot table data when the file is opened (default: true) */
   refreshOnLoad?: boolean;
+  /** Save pivot cache data in the file (default: true) */
+  saveData?: boolean;
 }
 
 /**
@@ -181,12 +183,22 @@ export interface PivotCacheField {
   isNumeric: boolean;
   /** Whether this field contains dates */
   isDate: boolean;
+  /** Whether this field contains boolean values */
+  hasBoolean: boolean;
+  /** Whether this field contains blank (null/undefined) values */
+  hasBlank: boolean;
+  /** Number format ID for this field (cache field numFmtId) */
+  numFmtId?: number;
   /** Unique string values (for shared items) */
   sharedItems: string[];
   /** Min numeric value */
   minValue?: number;
   /** Max numeric value */
   maxValue?: number;
+  /** Min date value (for date fields) */
+  minDate?: Date;
+  /** Max date value (for date fields) */
+  maxDate?: Date;
 }
 
 /**

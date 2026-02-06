@@ -3,8 +3,8 @@ import type { Worksheet } from './worksheet';
 import { parseAddress, toAddress } from './utils/address';
 import { formatCellValue } from './utils/format';
 
-// Excel epoch: December 30, 1899 (accounting for the 1900 leap year bug)
-const EXCEL_EPOCH = new Date(Date.UTC(1899, 11, 30));
+// Excel epoch: December 31, 1899 (accounting for the 1900 leap year bug)
+const EXCEL_EPOCH = new Date(Date.UTC(1899, 11, 31));
 const MS_PER_DAY = 24 * 60 * 60 * 1000;
 
 // Excel error types
@@ -333,8 +333,8 @@ export class Cell {
   _excelDateToJs(serial: number): Date {
     // Excel incorrectly considers 1900 a leap year
     // Dates after Feb 28, 1900 need adjustment
-    const adjusted = serial > 60 ? serial - 1 : serial;
-    const ms = Math.round((adjusted - 1) * MS_PER_DAY);
+    const adjusted = serial >= 60 ? serial - 1 : serial;
+    const ms = Math.round(adjusted * MS_PER_DAY);
     return new Date(EXCEL_EPOCH.getTime() + ms);
   }
 
@@ -344,9 +344,9 @@ export class Cell {
    */
   _jsDateToExcel(date: Date): number {
     const ms = date.getTime() - EXCEL_EPOCH.getTime();
-    let serial = ms / MS_PER_DAY + 1;
+    let serial = ms / MS_PER_DAY;
     // Account for Excel's 1900 leap year bug
-    if (serial > 60) {
+    if (serial >= 60) {
       serial += 1;
     }
     return serial;

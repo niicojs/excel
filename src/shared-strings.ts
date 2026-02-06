@@ -138,6 +138,13 @@ export class SharedStrings {
   }
 
   /**
+   * Get all unique shared strings in insertion order.
+   */
+  getAllStrings(): string[] {
+    return this.entries.map((entry) => entry.text);
+  }
+
+  /**
    * Generate XML for the shared strings table
    */
   toXml(): string {

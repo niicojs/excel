@@ -381,7 +381,6 @@ export class PivotTable {
           subtotal: f.aggregation || 'sum',
         };
 
-        // Add numFmtId if it was resolved during addValueField
         if (f.numFmtId !== undefined) {
           attrs.numFmtId = String(f.numFmtId);
         }
@@ -390,9 +389,6 @@ export class PivotTable {
       });
       children.push(createElement('dataFields', { count: String(dataFieldNodes.length) }, dataFieldNodes));
     }
-
-    // Check if any value field has a number format
-    const hasNumberFormats = this._valueFields.some((f) => f.numFmtId !== undefined);
 
     // Pivot table style
     children.push(
@@ -417,7 +413,7 @@ export class PivotTable {
         'xmlns:r': 'http://schemas.openxmlformats.org/officeDocument/2006/relationships',
         name: this._name,
         cacheId: String(this._cache.cacheId),
-        applyNumberFormats: hasNumberFormats ? '1' : '0',
+        applyNumberFormats: '1',
         applyBorderFormats: '0',
         applyFontFormats: '0',
         applyPatternFormats: '0',

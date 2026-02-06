@@ -33,7 +33,7 @@ export class Workbook {
   // Pivot table support
   private _pivotTables: PivotTable[] = [];
   private _pivotCaches: PivotCache[] = [];
-  private _nextCacheId = 0;
+  private _nextCacheId = 5;
   private _nextCacheFileIndex = 1;
 
   // Table support
@@ -604,10 +604,15 @@ export class Workbook {
     const cacheId = this._nextCacheId++;
     const cacheFileIndex = this._nextCacheFileIndex++;
     const cache = new PivotCache(cacheId, sourceSheet, sourceRange, cacheFileIndex);
+    cache.setStyles(this._styles);
     cache.buildFromData(headers, data);
     // refreshOnLoad defaults to true; only disable if explicitly set to false
     if (config.refreshOnLoad === false) {
       cache.refreshOnLoad = false;
+    }
+    // saveData defaults to true; only disable if explicitly set to false
+    if (config.saveData === false) {
+      cache.saveData = false;
     }
     this._pivotCaches.push(cache);
 
@@ -669,6 +674,7 @@ export class Workbook {
 
     return { headers, data };
   }
+
 
   /**
    * Save the workbook to a file
