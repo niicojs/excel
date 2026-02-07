@@ -328,18 +328,14 @@ const formatDate = (value: Date, format: string, locale: string): string => {
   return tokens.map((token) => formatDatePart(value, token, locale)).join('');
 };
 
-export const formatCellValue = (
-  value: number | Date,
-  style: CellStyle | undefined,
-  locale?: string,
-): string | null => {
+export const formatCellValue = (value: number | Date, style: CellStyle | undefined, locale?: string): string | null => {
   const numberFormat = style?.numberFormat;
   if (!numberFormat) return null;
 
   const normalizedLocale = locale || DEFAULT_LOCALE;
   const sections = splitFormatSections(numberFormat);
   const hasNegativeSection = sections.length > 1;
-  const section = value instanceof Date ? sections[0] : value < 0 ? sections[1] ?? sections[0] : sections[0];
+  const section = value instanceof Date ? sections[0] : value < 0 ? (sections[1] ?? sections[0]) : sections[0];
 
   if (value instanceof Date && isDateFormat(section)) {
     return formatDate(value, section, normalizedLocale);

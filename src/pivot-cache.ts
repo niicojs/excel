@@ -36,7 +36,6 @@ export class PivotCache {
     this._styles = styles;
   }
 
-
   /**
    * Get the cache ID
    */
@@ -435,7 +434,6 @@ export class PivotCache {
     return String(value);
   }
 
-
   private _excelSerialToDate(serial: number): Date {
     // Excel epoch: December 31, 1899
     const EXCEL_EPOCH = Date.UTC(1899, 11, 31);
@@ -444,6 +442,4 @@ export class PivotCache {
     const ms = Math.round(adjusted * MS_PER_DAY);
     return new Date(EXCEL_EPOCH + ms);
   }
-
-
 }

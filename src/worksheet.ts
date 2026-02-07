@@ -526,7 +526,7 @@ export class Worksheet {
    * const data = sheet.toJson({ startRow: 2, startCol: 1 });
    * ```
    */
-   toJson<T = Record<string, CellValue>>(config: SheetToJsonConfig = {}): T[] {
+  toJson<T = Record<string, CellValue>>(config: SheetToJsonConfig = {}): T[] {
     const {
       fields,
       startRow = 0,

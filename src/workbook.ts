@@ -675,7 +675,6 @@ export class Workbook {
     return { headers, data };
   }
 
-
   /**
    * Save the workbook to a file
    */

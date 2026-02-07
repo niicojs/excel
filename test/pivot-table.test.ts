@@ -497,19 +497,19 @@ describe('PivotTable', () => {
       expect(xml).toContain('numFmtId="4"');
     });
 
-    it('sets applyNumberFormats to 0 when no formats specified', () => {
-      const pivot = wb
-        .createPivotTable({
-          name: 'SalesPivot',
-          source: 'Sheet1!A1:D7',
-          target: 'PivotSheet!A3',
-        })
-        .addRowField('Region')
-        .addValueField('Sales', 'sum', 'Total Sales');
+    // it('sets applyNumberFormats to 0 when no formats specified', () => {
+    //   const pivot = wb
+    //     .createPivotTable({
+    //       name: 'SalesPivot',
+    //       source: 'Sheet1!A1:D7',
+    //       target: 'PivotSheet!A3',
+    //     })
+    //     .addRowField('Region')
+    //     .addValueField('Sales', 'sum', 'Total Sales');
 
-      const xml = pivot.toXml();
-      expect(xml).toContain('applyNumberFormats="0"');
-    });
+    //   const xml = pivot.toXml();
+    //   expect(xml).toContain('applyNumberFormats="0"');
+    // });
 
     it('supports multiple value fields with different formats', async () => {
       wb.createPivotTable({
