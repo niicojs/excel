@@ -138,7 +138,7 @@ export class PivotCache {
       maxDate: undefined,
     }));
 
-    // Use Maps for case-insensitive unique value collection during analysis
+    // Use Maps for unique value collection during analysis
     const sharedItemsMaps: Map<string, string>[] = this._fields.map(() => new Map<string, string>());
 
     // Analyze data to determine field types and collect unique values
@@ -154,30 +154,25 @@ export class PivotCache {
 
         if (typeof value === 'string') {
           field.isNumeric = false;
-          // Preserve original behavior: only build shared items for select string fields
-          if (field.name === 'top') {
-            const normalized = value.toLocaleLowerCase();
-            const map = sharedItemsMaps[colIdx];
-            if (!map.has(normalized)) {
-              map.set(normalized, value);
-            }
+          const map = sharedItemsMaps[colIdx];
+          if (!map.has(value)) {
+            map.set(value, value);
           }
         } else if (typeof value === 'number') {
-          if (field.minValue === undefined || value < field.minValue) {
-            field.minValue = value;
-          }
-          if (field.maxValue === undefined || value > field.maxValue) {
-            field.maxValue = value;
-          }
-          if (field.name === 'date') {
+          if (field.isDate) {
             const d = this._excelSerialToDate(value);
-            field.isDate = true;
-            field.isNumeric = false;
             if (!field.minDate || d < field.minDate) {
               field.minDate = d;
             }
             if (!field.maxDate || d > field.maxDate) {
               field.maxDate = d;
+            }
+          } else {
+            if (field.minValue === undefined || value < field.minValue) {
+              field.minValue = value;
+            }
+            if (field.maxValue === undefined || value > field.maxValue) {
+              field.maxValue = value;
             }
           }
         } else if (value instanceof Date) {
@@ -198,19 +193,10 @@ export class PivotCache {
 
     // Resolve number formats if styles are available
     if (this._styles) {
-      const numericFmtId = 164;
       const dateFmtId = this._styles.getOrCreateNumFmtId('mm-dd-yy');
       for (const field of this._fields) {
         if (field.isDate) {
           field.numFmtId = dateFmtId;
-          continue;
-        }
-        if (field.isNumeric) {
-          if (field.name === 'jours') {
-            field.numFmtId = 0;
-          } else {
-            field.numFmtId = numericFmtId;
-          }
         }
       }
     }
@@ -225,10 +211,6 @@ export class PivotCache {
       // Convert Map values to array (maintains insertion order in ES6+)
       field.sharedItems = Array.from(map.values());
 
-      if (field.name !== 'top') {
-        field.sharedItems = [];
-      }
-
       // Build reverse lookup Map: value -> index
       if (field.sharedItems.length > 0) {
         const indexMap = new Map<string, number>();
@@ -238,7 +220,7 @@ export class PivotCache {
         this._sharedItemsIndexMap.set(colIdx, indexMap);
 
         if (field.hasBlank) {
-          const blankIndex = field.name === 'secteur' ? 1 : field.sharedItems.length;
+          const blankIndex = field.sharedItems.length;
           this._blankItemIndexMap.set(colIdx, blankIndex);
         }
       }
@@ -271,10 +253,11 @@ export class PivotCache {
       const sharedItemsAttrs: Record<string, string> = {};
       const sharedItemChildren: XmlNode[] = [];
 
-      if (field.sharedItems.length > 0 && field.name === 'top') {
+      if (field.sharedItems.length > 0) {
         // String field with shared items
         const total = field.hasBlank ? field.sharedItems.length + 1 : field.sharedItems.length;
         sharedItemsAttrs.count = String(total);
+        sharedItemsAttrs.containsString = '1';
 
         if (field.hasBlank) {
           sharedItemsAttrs.containsBlank = '1';
@@ -284,15 +267,8 @@ export class PivotCache {
           sharedItemChildren.push(createElement('s', { v: item }, []));
         }
         if (field.hasBlank) {
-          if (field.name === 'secteur') {
-            sharedItemChildren.splice(1, 0, createElement('m', {}, []));
-          } else {
-            sharedItemChildren.push(createElement('m', {}, []));
-          }
+          sharedItemChildren.push(createElement('m', {}, []));
         }
-      } else if (field.name !== 'top' && field.sharedItems.length > 0) {
-        // For non-top string fields, avoid sharedItems count/items to match Excel output
-        sharedItemsAttrs.containsString = '0';
       } else if (field.isDate) {
         sharedItemsAttrs.containsSemiMixedTypes = '0';
         sharedItemsAttrs.containsString = '0';
@@ -310,14 +286,8 @@ export class PivotCache {
         }
       } else if (field.isNumeric) {
         // Numeric field - use "0"/"1" for boolean attributes as Excel expects
-        if (field.name === 'cost') {
-          sharedItemsAttrs.containsMixedTypes = '1';
-        } else {
-          if (field.name !== 'jours') {
-            sharedItemsAttrs.containsSemiMixedTypes = '0';
-          }
-          sharedItemsAttrs.containsString = '0';
-        }
+        sharedItemsAttrs.containsSemiMixedTypes = '0';
+        sharedItemsAttrs.containsString = '0';
         sharedItemsAttrs.containsNumber = '1';
         if (field.hasBlank) {
           sharedItemsAttrs.containsBlank = '1';
@@ -333,36 +303,18 @@ export class PivotCache {
         }
       } else if (field.hasBoolean) {
         // Boolean-only field (no strings, no numbers)
-        // Excel does not add contains* flags for ww in this dataset
         if (field.hasBlank) {
           sharedItemsAttrs.containsBlank = '1';
         }
-        if (field.name === 'ww') {
-          sharedItemsAttrs.count = field.hasBlank ? '3' : '2';
-          sharedItemChildren.push(createElement('b', { v: '0' }, []));
-          sharedItemChildren.push(createElement('b', { v: '1' }, []));
-          if (field.hasBlank) {
-            sharedItemChildren.push(createElement('m', {}, []));
-          }
+        sharedItemsAttrs.count = field.hasBlank ? '3' : '2';
+        sharedItemChildren.push(createElement('b', { v: '0' }, []));
+        sharedItemChildren.push(createElement('b', { v: '1' }, []));
+        if (field.hasBlank) {
+          sharedItemChildren.push(createElement('m', {}, []));
         }
       } else if (field.hasBlank) {
         // Field that only contains blanks
-        if (
-          field.name === 'contratClient' ||
-          field.name === 'secteur' ||
-          field.name === 'vertical' ||
-          field.name === 'parentOppy' ||
-          field.name === 'pole' ||
-          field.name === 'oppyClosed' ||
-          field.name === 'domain' ||
-          field.name === 'businessOwner'
-        ) {
-          sharedItemsAttrs.containsBlank = '1';
-        } else {
-          sharedItemsAttrs.containsNonDate = '0';
-          sharedItemsAttrs.containsString = '0';
-          sharedItemsAttrs.containsBlank = '1';
-        }
+        sharedItemsAttrs.containsBlank = '1';
       }
 
       const sharedItemsNode = createElement('sharedItems', sharedItemsAttrs, sharedItemChildren);
@@ -437,18 +389,14 @@ export class PivotCache {
             fieldNodes.push(createElement('s', { v: value }, []));
           }
         } else if (typeof value === 'number') {
-          if (this._fields[colIdx]?.name === 'date') {
+          if (this._fields[colIdx]?.isDate) {
             const d = this._excelSerialToDate(value);
             fieldNodes.push(createElement('d', { v: this._formatDate(d) }, []));
           } else {
             fieldNodes.push(createElement('n', { v: String(value) }, []));
           }
         } else if (typeof value === 'boolean') {
-          if (this._fields[colIdx]?.name === 'ww') {
-            fieldNodes.push(createElement('x', { v: value ? '1' : '0' }, []));
-          } else {
-            fieldNodes.push(createElement('b', { v: value ? '1' : '0' }, []));
-          }
+          fieldNodes.push(createElement('b', { v: value ? '1' : '0' }, []));
         } else if (value instanceof Date) {
           fieldNodes.push(createElement('d', { v: this._formatDate(value) }, []));
         } else {

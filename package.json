@@ -1,6 +1,6 @@
 {
   "name": "@niicojs/excel",
-  "version": "0.3.3",
+  "version": "0.3.4",
   "description": "typescript library to manipulate excel files",
   "homepage": "https://github.com/niicojs/excel#readme",
   "bugs": {
