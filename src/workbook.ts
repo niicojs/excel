@@ -2,7 +2,6 @@ import { readFile, writeFile } from 'fs/promises';
 import type {
   SheetDefinition,
   Relationship,
-  PivotTableConfig,
   CellValue,
   SheetFromDataConfig,
   ColumnConfig,
@@ -12,10 +11,8 @@ import type {
 import { Worksheet } from './worksheet';
 import { SharedStrings } from './shared-strings';
 import { Styles } from './styles';
-import { PivotTable } from './pivot-table';
-import { PivotCache } from './pivot-cache';
 import { readZip, writeZip, readZipText, writeZipText, ZipFiles } from './utils/zip';
-import { parseAddress, parseRange, toAddress } from './utils/address';
+import { parseAddress } from './utils/address';
 import { parseXml, findElement, getChildren, getAttr, XmlNode, stringifyXml, createElement } from './utils/xml';
 
 /**
@@ -29,12 +26,6 @@ export class Workbook {
   private _sharedStrings: SharedStrings;
   private _styles: Styles;
   private _dirty = false;
-
-  // Pivot table support
-  private _pivotTables: PivotTable[] = [];
-  private _pivotCaches: PivotCache[] = [];
-  private _nextCacheId = 5;
-  private _nextCacheFileIndex = 1;
 
   // Table support
   private _nextTableId = 1;
@@ -560,122 +551,6 @@ export class Workbook {
   }
 
   /**
-   * Create a pivot table from source data.
-   *
-   * @param config - Pivot table configuration
-   * @returns PivotTable instance for fluent configuration
-   *
-   * @example
-   * ```typescript
-   * const pivot = wb.createPivotTable({
-   *   name: 'SalesPivot',
-   *   source: 'DataSheet!A1:D100',
-   *   target: 'PivotSheet!A3',
-   * });
-   *
-   * pivot
-   *   .addRowField('Region')
-   *   .addColumnField('Product')
-   *   .addValueField('Sales', 'sum', 'Total Sales');
-   * ```
-   */
-  createPivotTable(config: PivotTableConfig): PivotTable {
-    this._dirty = true;
-
-    // Parse source reference (Sheet!Range)
-    const { sheetName: sourceSheet, range: sourceRange } = this._parseSheetRef(config.source);
-
-    // Parse target reference
-    const { sheetName: targetSheet, range: targetCell } = this._parseSheetRef(config.target);
-
-    // Ensure target sheet exists
-    if (!this._sheetDefs.some((s) => s.name === targetSheet)) {
-      this.addSheet(targetSheet);
-    }
-
-    // Parse target cell address
-    const targetAddr = parseAddress(targetCell);
-
-    // Get source worksheet and extract data
-    const sourceWs = this.sheet(sourceSheet);
-    const { headers, data } = this._extractSourceData(sourceWs, sourceRange);
-
-    // Create pivot cache
-    const cacheId = this._nextCacheId++;
-    const cacheFileIndex = this._nextCacheFileIndex++;
-    const cache = new PivotCache(cacheId, sourceSheet, sourceRange, cacheFileIndex);
-    cache.setStyles(this._styles);
-    cache.buildFromData(headers, data);
-    // refreshOnLoad defaults to true; only disable if explicitly set to false
-    if (config.refreshOnLoad === false) {
-      cache.refreshOnLoad = false;
-    }
-    // saveData defaults to true; only disable if explicitly set to false
-    if (config.saveData === false) {
-      cache.saveData = false;
-    }
-    this._pivotCaches.push(cache);
-
-    // Create pivot table
-    const pivotTableIndex = this._pivotTables.length + 1;
-    const pivotTable = new PivotTable(
-      config.name,
-      cache,
-      targetSheet,
-      targetCell,
-      targetAddr.row + 1, // Convert to 1-based
-      targetAddr.col,
-      pivotTableIndex,
-      cacheFileIndex,
-    );
-
-    // Set styles reference for number format resolution
-    pivotTable.setStyles(this._styles);
-
-    this._pivotTables.push(pivotTable);
-
-    return pivotTable;
-  }
-
-  /**
-   * Parse a sheet reference like "Sheet1!A1:D100" into sheet name and range
-   */
-  private _parseSheetRef(ref: string): { sheetName: string; range: string } {
-    const match = ref.match(/^(.+?)!(.+)$/);
-    if (!match) {
-      throw new Error(`Invalid reference format: ${ref}. Expected "SheetName!Range"`);
-    }
-    return { sheetName: match[1], range: match[2] };
-  }
-
-  /**
-   * Extract headers and data from a source range
-   */
-  private _extractSourceData(sheet: Worksheet, rangeStr: string): { headers: string[]; data: CellValue[][] } {
-    const range = parseRange(rangeStr);
-    const headers: string[] = [];
-    const data: CellValue[][] = [];
-
-    // First row is headers
-    for (let col = range.start.col; col <= range.end.col; col++) {
-      const cell = sheet.cell(toAddress(range.start.row, col));
-      headers.push(String(cell.value ?? `Column${col + 1}`));
-    }
-
-    // Remaining rows are data
-    for (let row = range.start.row + 1; row <= range.end.row; row++) {
-      const rowData: CellValue[] = [];
-      for (let col = range.start.col; col <= range.end.col; col++) {
-        const cell = sheet.cell(toAddress(row, col));
-        rowData.push(cell.value);
-      }
-      data.push(rowData);
-    }
-
-    return { headers, data };
-  }
-
-  /**
    * Save the workbook to a file
    */
   async toFile(path: string): Promise<void> {
@@ -742,7 +617,7 @@ export class Workbook {
     const relationshipInfo = this._buildRelationshipInfo();
 
     // Update workbook.xml
-    this._updateWorkbookXml(relationshipInfo.pivotCacheRelIds);
+    this._updateWorkbookXml();
 
     // Update relationships
     this._updateRelationshipsXml(relationshipInfo.relNodes);
@@ -760,7 +635,7 @@ export class Workbook {
       writeZipText(this._files, 'xl/styles.xml', this._styles.toXml());
     }
 
-    // Update worksheets (needed for pivot table targets)
+    // Update worksheets
     for (const [name, worksheet] of this._sheets) {
       if (worksheet.dirty || this._dirty || worksheet.tables.length > 0) {
         const def = this._sheetDefs.find((s) => s.name === name);
@@ -774,12 +649,8 @@ export class Workbook {
       }
     }
 
-    // Update pivot tables
-    if (this._pivotTables.length > 0) {
-      this._updatePivotTableFiles();
-    }
-
     // Update tables (sets table rel IDs for tableParts)
+    this._updateTableFiles();
     this._updateTableFiles();
 
     // Update worksheets to align tableParts with relationship IDs
@@ -797,7 +668,7 @@ export class Workbook {
     }
   }
 
-  private _updateWorkbookXml(pivotCacheRelIds: Map<number, string>): void {
+  private _updateWorkbookXml(): void {
     const sheetNodes: XmlNode[] = this._sheetDefs.map((def) =>
       createElement('sheet', { name: def.name, sheetId: String(def.sheetId), 'r:id': def.rId }, []),
     );
@@ -805,18 +676,6 @@ export class Workbook {
     const sheetsNode = createElement('sheets', {}, sheetNodes);
 
     const children: XmlNode[] = [sheetsNode];
-
-    // Add pivot caches if any
-    if (this._pivotCaches.length > 0) {
-      const pivotCacheNodes: XmlNode[] = this._pivotCaches.map((cache) => {
-        const cacheRelId = pivotCacheRelIds.get(cache.cacheId);
-        if (!cacheRelId) {
-          throw new Error(`Missing pivot cache relationship ID for cache ${cache.cacheId}`);
-        }
-        return createElement('pivotCache', { cacheId: String(cache.cacheId), 'r:id': cacheRelId }, []);
-      });
-      children.push(createElement('pivotCaches', {}, pivotCacheNodes));
-    }
 
     const workbookNode = createElement(
       'workbook',
@@ -842,7 +701,7 @@ export class Workbook {
     writeZipText(this._files, 'xl/_rels/workbook.xml.rels', xml);
   }
 
-  private _buildRelationshipInfo(): { relNodes: XmlNode[]; pivotCacheRelIds: Map<number, string> } {
+  private _buildRelationshipInfo(): { relNodes: XmlNode[] } {
     const relNodes: XmlNode[] = this._relationships.map((rel) =>
       createElement('Relationship', { Id: rel.id, Type: rel.type, Target: rel.target }, []),
     );
@@ -898,25 +757,7 @@ export class Workbook {
       );
     }
 
-    // Add pivot cache relationships
-    const pivotCacheRelIds = new Map<number, string>();
-    for (const cache of this._pivotCaches) {
-      const id = allocateRelId();
-      pivotCacheRelIds.set(cache.cacheId, id);
-      relNodes.push(
-        createElement(
-          'Relationship',
-          {
-            Id: id,
-            Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheDefinition',
-            Target: `pivotCache/pivotCacheDefinition${cache.fileIndex}.xml`,
-          },
-          [],
-        ),
-      );
-    }
-
-    return { relNodes, pivotCacheRelIds };
+    return { relNodes };
   }
 
   private _updateContentTypes(): void {
@@ -974,44 +815,6 @@ export class Workbook {
           ),
         );
       }
-    }
-
-    // Add pivot cache definitions and records
-    for (const cache of this._pivotCaches) {
-      types.push(
-        createElement(
-          'Override',
-          {
-            PartName: `/xl/pivotCache/pivotCacheDefinition${cache.fileIndex}.xml`,
-            ContentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.pivotCacheDefinition+xml',
-          },
-          [],
-        ),
-      );
-      types.push(
-        createElement(
-          'Override',
-          {
-            PartName: `/xl/pivotCache/pivotCacheRecords${cache.fileIndex}.xml`,
-            ContentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.pivotCacheRecords+xml',
-          },
-          [],
-        ),
-      );
-    }
-
-    // Add pivot tables
-    for (const pivotTable of this._pivotTables) {
-      types.push(
-        createElement(
-          'Override',
-          {
-            PartName: `/xl/pivotTables/pivotTable${pivotTable.index}.xml`,
-            ContentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.pivotTable+xml',
-          },
-          [],
-        ),
-      );
     }
 
     // Add tables
@@ -1104,174 +907,6 @@ export class Workbook {
         this._files,
         '_rels/.rels',
         `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n${stringifyXml([rootRels])}`,
-      );
-    }
-  }
-
-  /**
-   * Generate all pivot table related files
-   */
-  private _updatePivotTableFiles(): void {
-    // Track which sheets have pivot tables for their .rels files
-    const sheetPivotTables: Map<string, PivotTable[]> = new Map();
-
-    for (const pivotTable of this._pivotTables) {
-      const sheetName = pivotTable.targetSheet;
-      if (!sheetPivotTables.has(sheetName)) {
-        sheetPivotTables.set(sheetName, []);
-      }
-      sheetPivotTables.get(sheetName)!.push(pivotTable);
-    }
-
-    // Generate pivot cache files
-    for (let i = 0; i < this._pivotCaches.length; i++) {
-      const cache = this._pivotCaches[i];
-
-      // Pivot cache definition
-      const definitionPath = `xl/pivotCache/pivotCacheDefinition${cache.fileIndex}.xml`;
-      writeZipText(this._files, definitionPath, cache.toDefinitionXml('rId1'));
-
-      // Pivot cache records
-      const recordsPath = `xl/pivotCache/pivotCacheRecords${cache.fileIndex}.xml`;
-      writeZipText(this._files, recordsPath, cache.toRecordsXml());
-
-      // Pivot cache definition relationships (link to records)
-      const cacheRelsPath = `xl/pivotCache/_rels/pivotCacheDefinition${cache.fileIndex}.xml.rels`;
-      const cacheRels = createElement(
-        'Relationships',
-        { xmlns: 'http://schemas.openxmlformats.org/package/2006/relationships' },
-        [
-          createElement(
-            'Relationship',
-            {
-              Id: 'rId1',
-              Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheRecords',
-              Target: `pivotCacheRecords${cache.fileIndex}.xml`,
-            },
-            [],
-          ),
-        ],
-      );
-      writeZipText(
-        this._files,
-        cacheRelsPath,
-        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n${stringifyXml([cacheRels])}`,
-      );
-    }
-
-    // Generate pivot table files
-    for (let i = 0; i < this._pivotTables.length; i++) {
-      const pivotTable = this._pivotTables[i];
-      const ptIdx = pivotTable.index;
-
-      // Pivot table definition
-      const ptPath = `xl/pivotTables/pivotTable${ptIdx}.xml`;
-      writeZipText(this._files, ptPath, pivotTable.toXml());
-
-      // Pivot table relationships (link to cache definition)
-      const cacheIdx = pivotTable.cacheFileIndex;
-      const ptRelsPath = `xl/pivotTables/_rels/pivotTable${ptIdx}.xml.rels`;
-      const ptRels = createElement(
-        'Relationships',
-        { xmlns: 'http://schemas.openxmlformats.org/package/2006/relationships' },
-        [
-          createElement(
-            'Relationship',
-            {
-              Id: 'rId1',
-              Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheDefinition',
-              Target: `../pivotCache/pivotCacheDefinition${cacheIdx}.xml`,
-            },
-            [],
-          ),
-        ],
-      );
-      writeZipText(
-        this._files,
-        ptRelsPath,
-        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n${stringifyXml([ptRels])}`,
-      );
-    }
-
-    // Generate worksheet relationships for pivot tables
-    for (const [sheetName, pivotTables] of sheetPivotTables) {
-      const def = this._sheetDefs.find((s) => s.name === sheetName);
-      if (!def) continue;
-
-      const rel = this._relationships.find((r) => r.id === def.rId);
-      if (!rel) continue;
-
-      // Extract sheet file name from target path
-      const sheetFileName = rel.target.split('/').pop();
-      const sheetRelsPath = `xl/worksheets/_rels/${sheetFileName}.rels`;
-
-      const existingRelsXml = readZipText(this._files, sheetRelsPath);
-      let relNodes: XmlNode[] = [];
-      let nextRelId = 1;
-      const reservedRelIds = new Set<string>();
-
-      if (existingRelsXml) {
-        const parsed = parseXml(existingRelsXml);
-        const relsElement = findElement(parsed, 'Relationships');
-        if (relsElement) {
-          const existingRelNodes = getChildren(relsElement, 'Relationships');
-          for (const relNode of existingRelNodes) {
-            if ('Relationship' in relNode) {
-              relNodes.push(relNode);
-              const id = getAttr(relNode, 'Id');
-              if (id) {
-                reservedRelIds.add(id);
-                const idNum = parseInt(id.replace('rId', ''), 10);
-                if (idNum >= nextRelId) {
-                  nextRelId = idNum + 1;
-                }
-              }
-            }
-          }
-        }
-      }
-
-      const allocateRelId = (): string => {
-        while (reservedRelIds.has(`rId${nextRelId}`)) {
-          nextRelId++;
-        }
-        const id = `rId${nextRelId}`;
-        nextRelId++;
-        reservedRelIds.add(id);
-        return id;
-      };
-
-      for (const pt of pivotTables) {
-        const target = `../pivotTables/pivotTable${pt.index}.xml`;
-        const existing = relNodes.some(
-          (node) =>
-            getAttr(node, 'Type') ===
-              'http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotTable' &&
-            getAttr(node, 'Target') === target,
-        );
-        if (existing) continue;
-        relNodes.push(
-          createElement(
-            'Relationship',
-            {
-              Id: allocateRelId(),
-              Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotTable',
-              Target: target,
-            },
-            [],
-          ),
-        );
-      }
-
-      const sheetRels = createElement(
-        'Relationships',
-        { xmlns: 'http://schemas.openxmlformats.org/package/2006/relationships' },
-        relNodes,
-      );
-      writeZipText(
-        this._files,
-        sheetRelsPath,
-        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n${stringifyXml([sheetRels])}`,
       );
     }
   }

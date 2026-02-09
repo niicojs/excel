@@ -22,7 +22,7 @@ const builderOptions = {
   commentPropName: '#comment',
   cdataPropName: '#cdata',
   format: false,
-  suppressEmptyNode: false,
+  suppressEmptyNode: true,
   suppressBooleanAttributes: false,
 };
 

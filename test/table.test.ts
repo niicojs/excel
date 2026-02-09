@@ -542,27 +542,6 @@ describe('Table', () => {
       expect(buffer).toBeInstanceOf(Uint8Array);
       expect(buffer.length).toBeGreaterThan(0);
     });
-
-    it('generates file with table and pivot table on same sheet', async () => {
-      // Create table
-      sheet.createTable({
-        name: 'SalesData',
-        range: 'A1:D6',
-      });
-
-      // Create pivot table
-      wb.createPivotTable({
-        name: 'SalesPivot',
-        source: 'Sheet1!A1:D6',
-        target: 'Sheet1!F1',
-      })
-        .addRowField('Department')
-        .addValueField('Sales', 'sum');
-
-      const buffer = await wb.toBuffer();
-      expect(buffer).toBeInstanceOf(Uint8Array);
-      expect(buffer.length).toBeGreaterThan(0);
-    });
   });
 
   describe('worksheet integration', () => {
