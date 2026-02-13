@@ -197,6 +197,50 @@ export interface TableStyleConfig {
 }
 
 /**
+ * Pivot table aggregation functions.
+ */
+export type PivotAggregationType = 'sum' | 'count' | 'average' | 'min' | 'max';
+
+/**
+ * Pivot field sort order.
+ */
+export type PivotSortOrder = 'asc' | 'desc';
+
+/**
+ * Filter definition for pivot fields.
+ * Use either include or exclude, not both.
+ */
+export type PivotFieldFilter = { include: string[] } | { exclude: string[] };
+
+/**
+ * Value field configuration for pivot tables.
+ */
+export interface PivotValueConfig {
+  /** Source field name */
+  field: string;
+  /** Aggregation type (default: 'sum') */
+  aggregation?: PivotAggregationType;
+  /** Display name for the value field */
+  name?: string;
+  /** Number format to apply to values */
+  numberFormat?: string;
+}
+
+/**
+ * Configuration for creating a PivotTable.
+ */
+export interface PivotTableConfig {
+  /** Pivot table name */
+  name: string;
+  /** Source data range with sheet name, e.g. "Data!A1:E100" */
+  source: string;
+  /** Target cell with sheet name, e.g. "Summary!A3" */
+  target: string;
+  /** Refresh pivot when opening workbook (default: true) */
+  refreshOnLoad?: boolean;
+}
+
+/**
  * Aggregation functions available for table total row
  */
 export type TableTotalFunction = 'sum' | 'count' | 'average' | 'min' | 'max' | 'stdDev' | 'var' | 'countNums' | 'none';

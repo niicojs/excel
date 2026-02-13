@@ -96,6 +96,14 @@ Create sheets directly from arrays of objects - great for exporting data from AP
 npx tsx examples/sheet-from-objects.ts
 ```
 
+### pivot-table.ts
+
+Create a pivot table with row fields, value fields, sorting, and number formatting.
+
+```bash
+npx tsx examples/pivot-table.ts
+```
+
 ## Output
 
 All generated Excel files are saved to `examples/output/`. This directory is gitignored.

@@ -34,9 +34,11 @@ export class Worksheet {
   private _tables: Table[] = [];
   private _preserveXml = false;
   private _tableRelIds: string[] | null = null;
+  private _pivotTableRelIds: string[] | null = null;
   private _sheetViewsDirty = false;
   private _colsDirty = false;
   private _tablePartsDirty = false;
+  private _pivotTablePartsDirty = false;
 
   constructor(workbook: Workbook, name: string) {
     this._workbook = workbook;
@@ -452,6 +454,15 @@ export class Worksheet {
   }
 
   /**
+   * Set pivot table relationship IDs for pivotTableParts generation.
+   * @internal
+   */
+  setPivotTableRelIds(ids: string[] | null): void {
+    this._pivotTableRelIds = ids ? [...ids] : null;
+    this._pivotTablePartsDirty = true;
+  }
+
+  /**
    * Create an Excel Table (ListObject) from a data range.
    *
    * Tables provide structured data features like auto-filter, banded styling,
@@ -745,6 +756,11 @@ export class Worksheet {
       worksheetChildren.push(tablePartsNode);
     }
 
+    const pivotTablePartsNode = this._buildPivotTablePartsNode();
+    if (pivotTablePartsNode) {
+      worksheetChildren.push(pivotTablePartsNode);
+    }
+
     const worksheetNode = createElement(
       'worksheet',
       {
@@ -873,6 +889,14 @@ export class Worksheet {
     return createElement('tableParts', { count: String(this._tables.length) }, tablePartNodes);
   }
 
+  private _buildPivotTablePartsNode(): XmlNode | null {
+    if (!this._pivotTableRelIds || this._pivotTableRelIds.length === 0) return null;
+    const pivotPartNodes: XmlNode[] = this._pivotTableRelIds.map((relId) =>
+      createElement('pivotTablePart', { 'r:id': relId }, []),
+    );
+    return createElement('pivotTableParts', { count: String(pivotPartNodes.length) }, pivotPartNodes);
+  }
+
   private _buildPreservedWorksheet(): XmlNode | null {
     if (!this._xmlNodes) return null;
     const worksheet = findElement(this._xmlNodes, 'worksheet');
@@ -912,6 +936,11 @@ export class Worksheet {
     if (this._tablePartsDirty) {
       const tablePartsNode = this._buildTablePartsNode();
       upsertChild('tableParts', tablePartsNode);
+    }
+
+    if (this._pivotTablePartsDirty) {
+      const pivotTablePartsNode = this._buildPivotTablePartsNode();
+      upsertChild('pivotTableParts', pivotTablePartsNode);
     }
 
     return worksheet;

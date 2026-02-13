@@ -95,6 +95,54 @@ export const toRange = (range: RangeAddress): string => {
 };
 
 /**
+ * Parses a qualified sheet + address reference.
+ * Supports Sheet!A1 and 'Sheet Name'!A1.
+ */
+export const parseSheetAddress = (reference: string): { sheet: string; address: CellAddress } => {
+  const exclamationIndex = reference.lastIndexOf('!');
+  if (exclamationIndex <= 0 || exclamationIndex >= reference.length - 1) {
+    throw new Error(`Invalid sheet address reference: ${reference}`);
+  }
+
+  const rawSheet = reference.slice(0, exclamationIndex);
+  const addressPart = reference.slice(exclamationIndex + 1);
+  const sheet = unquoteSheetName(rawSheet);
+
+  return {
+    sheet,
+    address: parseAddress(addressPart),
+  };
+};
+
+/**
+ * Parses a qualified sheet + range reference.
+ * Supports Sheet!A1:B10 and 'Sheet Name'!A1:B10.
+ */
+export const parseSheetRange = (reference: string): { sheet: string; range: RangeAddress } => {
+  const exclamationIndex = reference.lastIndexOf('!');
+  if (exclamationIndex <= 0 || exclamationIndex >= reference.length - 1) {
+    throw new Error(`Invalid sheet range reference: ${reference}`);
+  }
+
+  const rawSheet = reference.slice(0, exclamationIndex);
+  const rangePart = reference.slice(exclamationIndex + 1);
+  const sheet = unquoteSheetName(rawSheet);
+
+  return {
+    sheet,
+    range: parseRange(rangePart),
+  };
+};
+
+const unquoteSheetName = (sheet: string): string => {
+  const trimmed = sheet.trim();
+  if (trimmed.startsWith("'") && trimmed.endsWith("'") && trimmed.length >= 2) {
+    return trimmed.slice(1, -1).replace(/''/g, "'");
+  }
+  return trimmed;
+};
+
+/**
  * Normalizes a range so start is always top-left and end is bottom-right
  */
 export const normalizeRange = (range: RangeAddress): RangeAddress => {

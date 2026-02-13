@@ -7,12 +7,15 @@ import type {
   ColumnConfig,
   RichCellValue,
   DateHandling,
+  PivotTableConfig,
+  RangeAddress,
 } from './types';
 import { Worksheet } from './worksheet';
 import { SharedStrings } from './shared-strings';
 import { Styles } from './styles';
+import { PivotTable } from './pivot-table';
 import { readZip, writeZip, readZipText, writeZipText, ZipFiles } from './utils/zip';
-import { parseAddress } from './utils/address';
+import { parseAddress, parseSheetAddress, parseSheetRange } from './utils/address';
 import { parseXml, findElement, getChildren, getAttr, XmlNode, stringifyXml, createElement } from './utils/xml';
 
 /**
@@ -29,6 +32,11 @@ export class Workbook {
 
   // Table support
   private _nextTableId = 1;
+
+  // Pivot table support
+  private _pivotTables: PivotTable[] = [];
+  private _nextPivotTableId = 1;
+  private _nextPivotCacheId = 1;
 
   // Date serialization handling
   private _dateHandling: DateHandling = 'jsDate';
@@ -155,6 +163,102 @@ export class Workbook {
    */
   getNextTableId(): number {
     return this._nextTableId++;
+  }
+
+  /**
+   * Get all pivot tables in the workbook.
+   */
+  get pivotTables(): PivotTable[] {
+    return [...this._pivotTables];
+  }
+
+  /**
+   * Create a new pivot table.
+   */
+  createPivotTable(config: PivotTableConfig): PivotTable {
+    if (!config.name || config.name.trim().length === 0) {
+      throw new Error('Pivot table name is required');
+    }
+
+    if (this._pivotTables.some((pivot) => pivot.name === config.name)) {
+      throw new Error(`Pivot table name already exists: ${config.name}`);
+    }
+
+    const sourceRef = parseSheetRange(config.source);
+    const targetRef = parseSheetAddress(config.target);
+
+    const sourceSheet = this.sheet(sourceRef.sheet);
+    this.sheet(targetRef.sheet);
+
+    const sourceRange = this._normalizeRange(sourceRef.range);
+    if (sourceRange.start.row >= sourceRange.end.row) {
+      throw new Error('Pivot source range must include a header row and at least one data row');
+    }
+
+    const fields = this._extractPivotFields(sourceSheet, sourceRange);
+
+    const cacheId = this._nextPivotCacheId++;
+    const pivotId = this._nextPivotTableId++;
+    const cachePartIndex = this._pivotTables.length + 1;
+
+    const pivot = new PivotTable(
+      this,
+      config,
+      sourceRef.sheet,
+      sourceSheet,
+      sourceRange,
+      targetRef.sheet,
+      targetRef.address,
+      cacheId,
+      pivotId,
+      cachePartIndex,
+      fields,
+    );
+
+    this._pivotTables.push(pivot);
+    this._dirty = true;
+
+    return pivot;
+  }
+
+  private _extractPivotFields(
+    sourceSheet: Worksheet,
+    sourceRange: RangeAddress,
+  ): { name: string; sourceCol: number }[] {
+    const fields: { name: string; sourceCol: number }[] = [];
+    const seen = new Set<string>();
+
+    for (let col = sourceRange.start.col; col <= sourceRange.end.col; col++) {
+      const headerCell = sourceSheet.getCellIfExists(sourceRange.start.row, col);
+      const rawHeader = headerCell?.value;
+      const name = rawHeader == null ? `Column${col - sourceRange.start.col + 1}` : String(rawHeader).trim();
+
+      if (!name) {
+        throw new Error(`Pivot source header is empty at column ${col + 1}`);
+      }
+
+      if (seen.has(name)) {
+        throw new Error(`Duplicate pivot source header: ${name}`);
+      }
+
+      seen.add(name);
+      fields.push({ name, sourceCol: col });
+    }
+
+    return fields;
+  }
+
+  private _normalizeRange(range: RangeAddress): RangeAddress {
+    return {
+      start: {
+        row: Math.min(range.start.row, range.end.row),
+        col: Math.min(range.start.col, range.end.col),
+      },
+      end: {
+        row: Math.max(range.start.row, range.end.row),
+        col: Math.max(range.start.col, range.end.col),
+      },
+    };
   }
 
   /**
@@ -617,7 +721,7 @@ export class Workbook {
     const relationshipInfo = this._buildRelationshipInfo();
 
     // Update workbook.xml
-    this._updateWorkbookXml();
+    this._updateWorkbookXml(relationshipInfo.pivotCacheRelByTarget);
 
     // Update relationships
     this._updateRelationshipsXml(relationshipInfo.relNodes);
@@ -651,11 +755,13 @@ export class Workbook {
 
     // Update tables (sets table rel IDs for tableParts)
     this._updateTableFiles();
-    this._updateTableFiles();
+
+    // Update pivot tables (sets pivot rel IDs for pivotTableParts)
+    this._updatePivotFiles();
 
     // Update worksheets to align tableParts with relationship IDs
     for (const [name, worksheet] of this._sheets) {
-      if (worksheet.dirty || this._dirty || worksheet.tables.length > 0) {
+      if (worksheet.dirty || this._dirty || worksheet.tables.length > 0 || this._pivotTables.length > 0) {
         const def = this._sheetDefs.find((s) => s.name === name);
         if (def) {
           const rel = this._relationships.find((r) => r.id === def.rId);
@@ -668,7 +774,7 @@ export class Workbook {
     }
   }
 
-  private _updateWorkbookXml(): void {
+  private _updateWorkbookXml(pivotCacheRelByTarget: Map<string, string>): void {
     const sheetNodes: XmlNode[] = this._sheetDefs.map((def) =>
       createElement('sheet', { name: def.name, sheetId: String(def.sheetId), 'r:id': def.rId }, []),
     );
@@ -676,6 +782,20 @@ export class Workbook {
     const sheetsNode = createElement('sheets', {}, sheetNodes);
 
     const children: XmlNode[] = [sheetsNode];
+
+    if (this._pivotTables.length > 0) {
+      const pivotCacheNodes: XmlNode[] = [];
+      for (const pivot of this._pivotTables) {
+        const target = `pivotCache/pivotCacheDefinition${pivot.cachePartIndex}.xml`;
+        const relId = pivotCacheRelByTarget.get(target);
+        if (!relId) continue;
+        pivotCacheNodes.push(createElement('pivotCache', { cacheId: String(pivot.cacheId), 'r:id': relId }, []));
+      }
+
+      if (pivotCacheNodes.length > 0) {
+        children.push(createElement('pivotCaches', {}, pivotCacheNodes));
+      }
+    }
 
     const workbookNode = createElement(
       'workbook',
@@ -701,10 +821,11 @@ export class Workbook {
     writeZipText(this._files, 'xl/_rels/workbook.xml.rels', xml);
   }
 
-  private _buildRelationshipInfo(): { relNodes: XmlNode[] } {
+  private _buildRelationshipInfo(): { relNodes: XmlNode[]; pivotCacheRelByTarget: Map<string, string> } {
     const relNodes: XmlNode[] = this._relationships.map((rel) =>
       createElement('Relationship', { Id: rel.id, Type: rel.type, Target: rel.target }, []),
     );
+    const pivotCacheRelByTarget = new Map<string, string>();
 
     const reservedRelIds = new Set<string>(relNodes.map((node) => getAttr(node, 'Id') || '').filter(Boolean));
     let nextRelId = Math.max(0, ...this._relationships.map((r) => parseInt(r.id.replace('rId', ''), 10) || 0)) + 1;
@@ -757,7 +878,44 @@ export class Workbook {
       );
     }
 
-    return { relNodes };
+    for (const pivot of this._pivotTables) {
+      const target = `pivotCache/pivotCacheDefinition${pivot.cachePartIndex}.xml`;
+      const hasPivotCacheRel = relNodes.some(
+        (node) =>
+          getAttr(node, 'Type') ===
+            'http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheDefinition' &&
+          getAttr(node, 'Target') === target,
+      );
+
+      if (!hasPivotCacheRel) {
+        const id = allocateRelId();
+        pivotCacheRelByTarget.set(target, id);
+        relNodes.push(
+          createElement(
+            'Relationship',
+            {
+              Id: id,
+              Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheDefinition',
+              Target: target,
+            },
+            [],
+          ),
+        );
+      } else {
+        const existing = relNodes.find(
+          (node) =>
+            getAttr(node, 'Type') ===
+              'http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheDefinition' &&
+            getAttr(node, 'Target') === target,
+        );
+        const existingId = existing ? getAttr(existing, 'Id') : undefined;
+        if (existingId) {
+          pivotCacheRelByTarget.set(target, existingId);
+        }
+      }
+    }
+
+    return { relNodes, pivotCacheRelByTarget };
   }
 
   private _updateContentTypes(): void {
@@ -836,6 +994,42 @@ export class Workbook {
           tableIndex++;
         }
       }
+    }
+
+    // Add pivot caches and pivot tables
+    for (const pivot of this._pivotTables) {
+      types.push(
+        createElement(
+          'Override',
+          {
+            PartName: `/xl/pivotCache/pivotCacheDefinition${pivot.cachePartIndex}.xml`,
+            ContentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.pivotCacheDefinition+xml',
+          },
+          [],
+        ),
+      );
+
+      types.push(
+        createElement(
+          'Override',
+          {
+            PartName: `/xl/pivotCache/pivotCacheRecords${pivot.cachePartIndex}.xml`,
+            ContentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.pivotCacheRecords+xml',
+          },
+          [],
+        ),
+      );
+
+      types.push(
+        createElement(
+          'Override',
+          {
+            PartName: `/xl/pivotTables/pivotTable${pivot.pivotId}.xml`,
+            ContentType: 'application/vnd.openxmlformats-officedocument.spreadsheetml.pivotTable+xml',
+          },
+          [],
+        ),
+      );
     }
 
     const existingTypesXml = readZipText(this._files, '[Content_Types].xml');
@@ -1036,6 +1230,132 @@ export class Workbook {
         { xmlns: 'http://schemas.openxmlformats.org/package/2006/relationships' },
         relNodes,
       );
+      writeZipText(
+        this._files,
+        sheetRelsPath,
+        `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n${stringifyXml([sheetRels])}`,
+      );
+    }
+  }
+
+  /**
+   * Generate pivot cache/table parts and worksheet relationships.
+   */
+  private _updatePivotFiles(): void {
+    if (this._pivotTables.length === 0) {
+      return;
+    }
+
+    for (const pivot of this._pivotTables) {
+      const pivotCachePath = `xl/pivotCache/pivotCacheDefinition${pivot.cachePartIndex}.xml`;
+      writeZipText(this._files, pivotCachePath, pivot.toPivotCacheDefinitionXml());
+
+      const pivotCacheRecordsPath = `xl/pivotCache/pivotCacheRecords${pivot.cachePartIndex}.xml`;
+      writeZipText(this._files, pivotCacheRecordsPath, pivot.toPivotCacheRecordsXml());
+
+      const pivotCacheRelsPath = `xl/pivotCache/_rels/pivotCacheDefinition${pivot.cachePartIndex}.xml.rels`;
+      writeZipText(this._files, pivotCacheRelsPath, pivot.toPivotCacheDefinitionRelsXml());
+
+      const pivotTablePath = `xl/pivotTables/pivotTable${pivot.pivotId}.xml`;
+      writeZipText(this._files, pivotTablePath, pivot.toPivotTableDefinitionXml());
+    }
+
+    const pivotsBySheet = new Map<string, PivotTable[]>();
+    for (const pivot of this._pivotTables) {
+      const existing = pivotsBySheet.get(pivot.targetSheetName) ?? [];
+      existing.push(pivot);
+      pivotsBySheet.set(pivot.targetSheetName, existing);
+    }
+
+    for (const [sheetName, pivots] of pivotsBySheet) {
+      const def = this._sheetDefs.find((s) => s.name === sheetName);
+      if (!def) continue;
+
+      const rel = this._relationships.find((r) => r.id === def.rId);
+      if (!rel) continue;
+
+      const sheetFileName = rel.target.split('/').pop();
+      if (!sheetFileName) continue;
+
+      const sheetRelsPath = `xl/worksheets/_rels/${sheetFileName}.rels`;
+      const existingRelsXml = readZipText(this._files, sheetRelsPath);
+
+      let nextRelId = 1;
+      const relNodes: XmlNode[] = [];
+      const reservedRelIds = new Set<string>();
+
+      if (existingRelsXml) {
+        const parsed = parseXml(existingRelsXml);
+        const relsElement = findElement(parsed, 'Relationships');
+        if (relsElement) {
+          for (const relNode of getChildren(relsElement, 'Relationships')) {
+            if ('Relationship' in relNode) {
+              relNodes.push(relNode);
+              const id = getAttr(relNode, 'Id');
+              if (id) {
+                reservedRelIds.add(id);
+                const idNum = parseInt(id.replace('rId', ''), 10);
+                if (idNum >= nextRelId) {
+                  nextRelId = idNum + 1;
+                }
+              }
+            }
+          }
+        }
+      }
+
+      const allocateRelId = (): string => {
+        while (reservedRelIds.has(`rId${nextRelId}`)) {
+          nextRelId++;
+        }
+        const id = `rId${nextRelId}`;
+        nextRelId++;
+        reservedRelIds.add(id);
+        return id;
+      };
+
+      const pivotRelIds: string[] = [];
+      for (const pivot of pivots) {
+        const target = `../pivotTables/pivotTable${pivot.pivotId}.xml`;
+        const existing = relNodes.find(
+          (node) =>
+            getAttr(node, 'Type') ===
+              'http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotTable' &&
+            getAttr(node, 'Target') === target,
+        );
+
+        if (existing) {
+          const existingId = getAttr(existing, 'Id');
+          pivotRelIds.push(existingId ?? allocateRelId());
+          continue;
+        }
+
+        const id = allocateRelId();
+        pivotRelIds.push(id);
+        relNodes.push(
+          createElement(
+            'Relationship',
+            {
+              Id: id,
+              Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotTable',
+              Target: target,
+            },
+            [],
+          ),
+        );
+      }
+
+      const worksheet = this._sheets.get(sheetName);
+      if (worksheet) {
+        worksheet.setPivotTableRelIds(pivotRelIds);
+      }
+
+      const sheetRels = createElement(
+        'Relationships',
+        { xmlns: 'http://schemas.openxmlformats.org/package/2006/relationships' },
+        relNodes,
+      );
+
       writeZipText(
         this._files,
         sheetRelsPath,
