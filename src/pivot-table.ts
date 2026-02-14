@@ -311,7 +311,9 @@ export class PivotTable {
     const effectiveRowFieldName = this._rowFields[0];
     const rowFieldIndexes = effectiveRowFieldName ? [this._fieldIndex(effectiveRowFieldName)] : [];
     const colFieldIndexes = this._columnFields.length > 0 ? [this._fieldIndex(this._columnFields[0])] : [];
-    const valueFieldIndexes = new Set<number>(effectiveValueFields.map((valueField) => this._fieldIndex(valueField.field)));
+    const valueFieldIndexes = new Set<number>(
+      effectiveValueFields.map((valueField) => this._fieldIndex(valueField.field)),
+    );
 
     for (let index = 0; index < this._fields.length; index++) {
       const field = this._fields[index];
@@ -335,7 +337,9 @@ export class PivotTable {
       const children: XmlNode[] = [];
       if (rowFieldIndexes.includes(index) || colFieldIndexes.includes(index)) {
         const distinctItems = this._collectDistinctItems(index);
-        const itemNodes: XmlNode[] = distinctItems.map((_item, itemIndex) => createElement('item', { x: String(itemIndex) }, []));
+        const itemNodes: XmlNode[] = distinctItems.map((_item, itemIndex) =>
+          createElement('item', { x: String(itemIndex) }, []),
+        );
         itemNodes.push(createElement('item', { t: 'default' }, []));
         children.push(createElement('items', { count: String(itemNodes.length) }, itemNodes));
       }
@@ -390,7 +394,6 @@ export class PivotTable {
           colFieldIndexes.map((fieldIndex) => createElement('field', { x: String(fieldIndex) }, [])),
         ),
       );
-
     }
 
     // Excel expects colItems even when no explicit column fields are configured.
@@ -481,7 +484,9 @@ export class PivotTable {
     const nonNullValues = values.filter((value): value is Exclude<CellValue, null> => value !== null);
     const isAxisField = this._isAxisField(field.name);
     const isValueField = this._isValueField(field.name);
-    const numericValues = nonNullValues.filter((value): value is number => typeof value === 'number' && Number.isFinite(value));
+    const numericValues = nonNullValues.filter(
+      (value): value is number => typeof value === 'number' && Number.isFinite(value),
+    );
     const allNonNullAreNumbers = nonNullValues.length > 0 && numericValues.length === nonNullValues.length;
 
     if (isValueField || (!isAxisField && allNonNullAreNumbers)) {
@@ -500,7 +505,9 @@ export class PivotTable {
         attrs.containsInteger = '1';
       }
 
-      return createElement('cacheField', { name: field.name, numFmtId: '0' }, [createElement('sharedItems', attrs, [])]);
+      return createElement('cacheField', { name: field.name, numFmtId: '0' }, [
+        createElement('sharedItems', attrs, []),
+      ]);
     }
 
     if (!isAxisField) {
@@ -643,7 +650,9 @@ export class PivotTable {
   private _isAxisField(fieldName: string): boolean {
     const effectiveRowField = this._rowFields[0] ?? null;
     const effectiveColumnField = this._columnFields[0] ?? null;
-    return fieldName === effectiveRowField || fieldName === effectiveColumnField || this._filterFields.includes(fieldName);
+    return (
+      fieldName === effectiveRowField || fieldName === effectiveColumnField || this._filterFields.includes(fieldName)
+    );
   }
 
   private _sharedItemIndex(fieldIndex: number, value: Exclude<CellValue, null>): number {

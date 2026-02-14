@@ -61,12 +61,15 @@ await wb.toFile('output.xlsx');
 ```typescript
 import { Workbook } from '@niicojs/excel';
 
-// Load from file
+// Load from file (lazy parsing is enabled by default)
 const wb = await Workbook.fromFile('template.xlsx');
 
 // Or load from buffer
 const buffer = await fetch('https://example.com/file.xlsx').then((r) => r.arrayBuffer());
 const wb = await Workbook.fromBuffer(new Uint8Array(buffer));
+
+// Disable lazy parsing if you want eager loading
+const eager = await Workbook.fromFile('template.xlsx', { lazy: false });
 
 // Read data
 const sheet = wb.sheet('Sheet1');
@@ -425,12 +428,15 @@ const readData = sheet.toJson();
 ## Saving
 
 ```typescript
-// Load from file
+// Load from file (lazy parsing is enabled by default)
 const wb = await Workbook.fromFile('template.xlsx');
 
 // Or load from buffer
 const buffer = await fetch('https://example.com/file.xlsx').then((r) => r.arrayBuffer());
 const wb2 = await Workbook.fromBuffer(new Uint8Array(buffer));
+
+// Disable lazy parsing if you want eager loading
+const eager = await Workbook.fromFile('template.xlsx', { lazy: false });
 
 // Read data
 const sheet = wb.sheet('Sheet1');

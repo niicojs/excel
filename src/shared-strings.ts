@@ -18,21 +18,38 @@ export class SharedStrings {
   private stringToIndex: Map<string, number> = new Map();
   private _dirty = false;
   private _totalCount = 0;
+  private _rawXml: string | null = null;
+  private _parsed = false;
 
   /**
    * Parse shared strings from XML content
    */
   static parse(xml: string): SharedStrings {
     const ss = new SharedStrings();
-    const parsed = parseXml(xml);
+    ss._rawXml = xml;
+    ss._parse();
+    return ss;
+  }
+
+  private _parse(): void {
+    if (this._parsed) return;
+    if (!this._rawXml) {
+      this._parsed = true;
+      return;
+    }
+
+    const parsed = parseXml(this._rawXml);
     const sst = findElement(parsed, 'sst');
-    if (!sst) return ss;
+    if (!sst) {
+      this._parsed = true;
+      return;
+    }
 
     const countAttr = getAttr(sst, 'count');
     if (countAttr) {
       const total = parseInt(countAttr, 10);
       if (Number.isFinite(total) && total >= 0) {
-        ss._totalCount = total;
+        this._totalCount = total;
       }
     }
 
@@ -40,17 +57,17 @@ export class SharedStrings {
     for (const child of children) {
       if ('si' in child) {
         const siChildren = getChildren(child, 'si');
-        const text = ss.extractText(siChildren);
-        ss.entries.push({ text, node: child });
-        ss.stringToIndex.set(text, ss.entries.length - 1);
+        const text = this.extractText(siChildren);
+        this.entries.push({ text, node: child });
+        this.stringToIndex.set(text, this.entries.length - 1);
       }
     }
 
-    if (ss._totalCount === 0 && ss.entries.length > 0) {
-      ss._totalCount = ss.entries.length;
+    if (this._totalCount === 0 && this.entries.length > 0) {
+      this._totalCount = this.entries.length;
     }
 
-    return ss;
+    this._parsed = true;
   }
 
   /**
@@ -90,6 +107,7 @@ export class SharedStrings {
    * Get a string by index
    */
   getString(index: number): string | undefined {
+    this._parse();
     return this.entries[index]?.text;
   }
 
@@ -98,6 +116,7 @@ export class SharedStrings {
    * If the string already exists, returns the existing index
    */
   addString(str: string): number {
+    this._parse();
     const existing = this.stringToIndex.get(str);
     if (existing !== undefined) {
       this._totalCount++;
@@ -120,6 +139,7 @@ export class SharedStrings {
    * Check if the shared strings table has been modified
    */
   get dirty(): boolean {
+    this._parse();
     return this._dirty;
   }
 
@@ -127,6 +147,7 @@ export class SharedStrings {
    * Get the count of strings
    */
   get count(): number {
+    this._parse();
     return this.entries.length;
   }
 
@@ -134,6 +155,7 @@ export class SharedStrings {
    * Get total usage count of shared strings
    */
   get totalCount(): number {
+    this._parse();
     return Math.max(this._totalCount, this.entries.length);
   }
 
@@ -141,6 +163,7 @@ export class SharedStrings {
    * Get all unique shared strings in insertion order.
    */
   getAllStrings(): string[] {
+    this._parse();
     return this.entries.map((entry) => entry.text);
   }
 
@@ -148,6 +171,7 @@ export class SharedStrings {
    * Generate XML for the shared strings table
    */
   toXml(): string {
+    this._parse();
     const siElements: XmlNode[] = [];
     for (const entry of this.entries) {
       if (entry.node) {

@@ -80,6 +80,8 @@ export class Styles {
   private _borders: StyleBorder[] = [];
   private _cellXfs: CellXf[] = []; // Cell formats (combined style index)
   private _xmlNodes: XmlNode[] | null = null;
+  private _rawXml: string | null = null;
+  private _parsed = false;
   private _dirty = false;
 
   // Cache for style deduplication
@@ -146,10 +148,30 @@ export class Styles {
    */
   static parse(xml: string): Styles {
     const styles = new Styles();
-    styles._xmlNodes = parseXml(xml);
+    styles._rawXml = xml;
+    styles._parse();
+    return styles;
+  }
 
-    const styleSheet = findElement(styles._xmlNodes, 'styleSheet');
-    if (!styleSheet) return styles;
+  private _parse(): void {
+    if (this._parsed) return;
+    if (!this._rawXml) {
+      this._parsed = true;
+      return;
+    }
+
+    this._xmlNodes = parseXml(this._rawXml);
+
+    if (!this._xmlNodes) {
+      this._parsed = true;
+      return;
+    }
+
+    const styleSheet = findElement(this._xmlNodes, 'styleSheet');
+    if (!styleSheet) {
+      this._parsed = true;
+      return;
+    }
 
     const children = getChildren(styleSheet, 'styleSheet');
 
@@ -160,7 +182,7 @@ export class Styles {
         if ('numFmt' in child) {
           const id = parseInt(getAttr(child, 'numFmtId') || '0', 10);
           const code = getAttr(child, 'formatCode') || '';
-          styles._numFmts.set(id, code);
+          this._numFmts.set(id, code);
         }
       }
     }
@@ -170,7 +192,7 @@ export class Styles {
     if (fonts) {
       for (const child of getChildren(fonts, 'fonts')) {
         if ('font' in child) {
-          styles._fonts.push(styles._parseFont(child));
+          this._fonts.push(this._parseFont(child));
         }
       }
     }
@@ -180,7 +202,7 @@ export class Styles {
     if (fills) {
       for (const child of getChildren(fills, 'fills')) {
         if ('fill' in child) {
-          styles._fills.push(styles._parseFill(child));
+          this._fills.push(this._parseFill(child));
         }
       }
     }
@@ -190,7 +212,7 @@ export class Styles {
     if (borders) {
       for (const child of getChildren(borders, 'borders')) {
         if ('border' in child) {
-          styles._borders.push(styles._parseBorder(child));
+          this._borders.push(this._parseBorder(child));
         }
       }
     }
@@ -200,12 +222,12 @@ export class Styles {
     if (cellXfs) {
       for (const child of getChildren(cellXfs, 'cellXfs')) {
         if ('xf' in child) {
-          styles._cellXfs.push(styles._parseCellXf(child));
+          this._cellXfs.push(this._parseCellXf(child));
         }
       }
     }
 
-    return styles;
+    this._parsed = true;
   }
 
   /**
@@ -213,6 +235,7 @@ export class Styles {
    */
   static createDefault(): Styles {
     const styles = new Styles();
+    styles._parsed = true;
 
     // Default font (Calibri 11)
     styles._fonts.push({
@@ -366,6 +389,7 @@ export class Styles {
    * Get a style by index
    */
   getStyle(index: number): CellStyle {
+    this._parse();
     const cached = this._styleObjectCache.get(index);
     if (cached) return { ...cached };
 
@@ -440,6 +464,7 @@ export class Styles {
    * Uses caching to deduplicate identical styles
    */
   createStyle(style: CellStyle): number {
+    this._parse();
     const key = this._getStyleKey(style);
     const cached = this._styleCache.get(key);
     if (cached !== undefined) {
@@ -489,6 +514,7 @@ export class Styles {
    * Clone an existing style by index, optionally overriding fields.
    */
   cloneStyle(index: number, overrides: Partial<CellStyle> = {}): number {
+    this._parse();
     const baseStyle = this.getStyle(index);
     return this.createStyle({ ...baseStyle, ...overrides });
   }
@@ -602,6 +628,7 @@ export class Styles {
    * @param format - The number format string (e.g., '0.00', '#,##0', '$#,##0.00')
    */
   getOrCreateNumFmtId(format: string): number {
+    this._parse();
     this._dirty = true;
     return this._findOrCreateNumFmt(format);
   }
@@ -610,6 +637,7 @@ export class Styles {
    * Check if styles have been modified
    */
   get dirty(): boolean {
+    this._parse();
     return this._dirty;
   }
 
@@ -617,6 +645,7 @@ export class Styles {
    * Generate XML for styles
    */
   toXml(): string {
+    this._parse();
     const children: XmlNode[] = [];
 
     // Number formats

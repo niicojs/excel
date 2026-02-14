@@ -300,3 +300,14 @@ export interface SheetToJsonConfig {
    */
   locale?: string;
 }
+
+/**
+ * Options for reading a workbook from file/buffer.
+ */
+export interface WorkbookReadOptions {
+  /**
+   * Enable lazy parsing of ZIP entries and XML parts.
+   * Defaults to true.
+   */
+  lazy?: boolean;
+}

@@ -37,6 +37,7 @@ export type {
   RichCellValue,
   // Sheet to JSON types
   SheetToJsonConfig,
+  WorkbookReadOptions,
 } from './types';
 
 // Utility exports

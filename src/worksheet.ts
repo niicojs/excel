@@ -4,16 +4,7 @@ import { Cell, parseCellRef } from './cell';
 import { Range } from './range';
 import { Table } from './table';
 import { parseRange, toAddress, parseAddress, letterToCol } from './utils/address';
-import {
-  parseXml,
-  findElement,
-  getChildren,
-  getAttr,
-  XmlNode,
-  stringifyXml,
-  createElement,
-  createText,
-} from './utils/xml';
+import { findElement, getChildren, getAttr, XmlNode, stringifyXml, createElement, createText, parseXml } from './utils/xml';
 
 /**
  * Represents a worksheet in a workbook
@@ -25,7 +16,6 @@ export class Worksheet {
   private _xmlNodes: XmlNode[] | null = null;
   private _dirty = false;
   private _mergedCells: Set<string> = new Set();
-  private _sheetData: XmlNode[] = [];
   private _columnWidths: Map<number, number> = new Map();
   private _rowHeights: Map<number, number> = new Map();
   private _frozenPane: { row: number; col: number } | null = null;
@@ -33,6 +23,8 @@ export class Worksheet {
   private _boundsDirty = true;
   private _tables: Table[] = [];
   private _preserveXml = false;
+  private _rawXml: string | null = null;
+  private _lazyParse = false;
   private _tableRelIds: string[] | null = null;
   private _pivotTableRelIds: string[] | null = null;
   private _sheetViewsDirty = false;
@@ -70,11 +62,30 @@ export class Worksheet {
   /**
    * Parse worksheet XML content
    */
-  parse(xml: string): void {
-    this._xmlNodes = parseXml(xml);
+  parse(xml: string, options: { lazy?: boolean } = {}): void {
+    this._rawXml = xml;
+    this._xmlNodes = null;
+    this._preserveXml = true;
+    this._lazyParse = options.lazy ?? true;
+    if (!this._lazyParse) {
+      this._ensureParsed();
+    }
+  }
+
+  private _ensureParsed(): void {
+    if (!this._lazyParse) return;
+    if (!this._rawXml) {
+      this._lazyParse = false;
+      return;
+    }
+
+    this._xmlNodes = parseXml(this._rawXml);
     this._preserveXml = true;
     const worksheet = findElement(this._xmlNodes, 'worksheet');
-    if (!worksheet) return;
+    if (!worksheet) {
+      this._lazyParse = false;
+      return;
+    }
 
     const worksheetChildren = getChildren(worksheet, 'worksheet');
 
@@ -99,8 +110,8 @@ export class Worksheet {
     // Parse sheet data (cells)
     const sheetData = findElement(worksheetChildren, 'sheetData');
     if (sheetData) {
-      this._sheetData = getChildren(sheetData, 'sheetData');
-      this._parseSheetData(this._sheetData);
+      const rows = getChildren(sheetData, 'sheetData');
+      this._parseSheetData(rows);
     }
 
     // Parse column widths
@@ -134,6 +145,8 @@ export class Worksheet {
         }
       }
     }
+
+    this._lazyParse = false;
   }
 
   /**
@@ -257,6 +270,7 @@ export class Worksheet {
    * Get a cell by address or row/col
    */
   cell(rowOrAddress: number | string, col?: number): Cell {
+    this._ensureParsed();
     const { row, col: c } = parseCellRef(rowOrAddress, col);
     const address = toAddress(row, c);
 
@@ -274,6 +288,7 @@ export class Worksheet {
    * Get an existing cell without creating it.
    */
   getCellIfExists(rowOrAddress: number | string, col?: number): Cell | undefined {
+    this._ensureParsed();
     const { row, col: c } = parseCellRef(rowOrAddress, col);
     const address = toAddress(row, c);
     return this._cells.get(address);
@@ -285,6 +300,7 @@ export class Worksheet {
   range(rangeStr: string): Range;
   range(startRow: number, startCol: number, endRow: number, endCol: number): Range;
   range(startRowOrRange: number | string, startCol?: number, endRow?: number, endCol?: number): Range {
+    this._ensureParsed();
     let rangeAddr: RangeAddress;
 
     if (typeof startRowOrRange === 'string') {
@@ -306,6 +322,7 @@ export class Worksheet {
    * Merge cells in the given range
    */
   mergeCells(rangeOrStart: string, end?: string): void {
+    this._ensureParsed();
     let rangeStr: string;
     if (end) {
       rangeStr = `${rangeOrStart}:${end}`;
@@ -320,6 +337,7 @@ export class Worksheet {
    * Unmerge cells in the given range
    */
   unmergeCells(rangeStr: string): void {
+    this._ensureParsed();
     this._mergedCells.delete(rangeStr);
     this._dirty = true;
   }
@@ -328,6 +346,7 @@ export class Worksheet {
    * Get all merged cell ranges
    */
   get mergedCells(): string[] {
+    this._ensureParsed();
     return Array.from(this._mergedCells);
   }
 
@@ -335,6 +354,7 @@ export class Worksheet {
    * Check if the worksheet has been modified
    */
   get dirty(): boolean {
+    this._ensureParsed();
     if (this._dirty) return true;
     for (const cell of this._cells.values()) {
       if (cell.dirty) return true;
@@ -346,6 +366,7 @@ export class Worksheet {
    * Get all cells in the worksheet
    */
   get cells(): Map<string, Cell> {
+    this._ensureParsed();
     return this._cells;
   }
 
@@ -353,6 +374,7 @@ export class Worksheet {
    * Set a column width (0-based index or column letter)
    */
   setColumnWidth(col: number | string, width: number): void {
+    this._ensureParsed();
     if (!Number.isFinite(width) || width <= 0) {
       throw new Error('Column width must be a positive number');
     }
@@ -371,6 +393,7 @@ export class Worksheet {
    * Get a column width if set
    */
   getColumnWidth(col: number | string): number | undefined {
+    this._ensureParsed();
     const colIndex = typeof col === 'number' ? col : letterToCol(col);
     return this._columnWidths.get(colIndex);
   }
@@ -379,6 +402,7 @@ export class Worksheet {
    * Set a row height (0-based index)
    */
   setRowHeight(row: number, height: number): void {
+    this._ensureParsed();
     if (!Number.isFinite(height) || height <= 0) {
       throw new Error('Row height must be a positive number');
     }
@@ -395,6 +419,7 @@ export class Worksheet {
    * Get a row height if set
    */
   getRowHeight(row: number): number | undefined {
+    this._ensureParsed();
     return this._rowHeights.get(row);
   }
 
@@ -402,6 +427,7 @@ export class Worksheet {
    * Freeze panes at a given row/column split (counts from top-left)
    */
   freezePane(rowSplit: number, colSplit: number): void {
+    this._ensureParsed();
     if (rowSplit < 0 || colSplit < 0) {
       throw new Error('Freeze pane splits must be >= 0');
     }
@@ -418,6 +444,7 @@ export class Worksheet {
    * Get current frozen pane configuration
    */
   getFrozenPane(): { row: number; col: number } | null {
+    this._ensureParsed();
     return this._frozenPane ? { ...this._frozenPane } : null;
   }
 
@@ -425,6 +452,7 @@ export class Worksheet {
    * Get all tables in the worksheet
    */
   get tables(): Table[] {
+    this._ensureParsed();
     return [...this._tables];
   }
 
@@ -433,6 +461,7 @@ export class Worksheet {
    * @internal
    */
   getColumnWidths(): Map<number, number> {
+    this._ensureParsed();
     return new Map(this._columnWidths);
   }
 
@@ -441,6 +470,7 @@ export class Worksheet {
    * @internal
    */
   getRowHeights(): Map<number, number> {
+    this._ensureParsed();
     return new Map(this._rowHeights);
   }
 
@@ -449,6 +479,7 @@ export class Worksheet {
    * @internal
    */
   setTableRelIds(ids: string[] | null): void {
+    this._ensureParsed();
     this._tableRelIds = ids ? [...ids] : null;
     this._tablePartsDirty = true;
   }
@@ -458,6 +489,7 @@ export class Worksheet {
    * @internal
    */
   setPivotTableRelIds(ids: string[] | null): void {
+    this._ensureParsed();
     this._pivotTableRelIds = ids ? [...ids] : null;
     this._pivotTablePartsDirty = true;
   }
@@ -491,6 +523,7 @@ export class Worksheet {
    * ```
    */
   createTable(config: TableConfig): Table {
+    this._ensureParsed();
     // Validate table name is unique within the workbook
     for (const sheet of this._workbook.sheetNames) {
       const ws = this._workbook.sheet(sheet);
@@ -538,6 +571,7 @@ export class Worksheet {
    * ```
    */
   toJson<T = Record<string, CellValue>>(config: SheetToJsonConfig = {}): T[] {
+    this._ensureParsed();
     const {
       fields,
       startRow = 0,
@@ -679,6 +713,11 @@ export class Worksheet {
    * Generate XML for this worksheet
    */
   toXml(): string {
+    if (this._lazyParse && !this._dirty && this._rawXml) {
+      return this._rawXml;
+    }
+
+    this._ensureParsed();
     const preserved = this._preserveXml && this._xmlNodes ? this._buildPreservedWorksheet() : null;
     // Build sheetData from cells
     const sheetDataNode = this._buildSheetDataNode();

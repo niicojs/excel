@@ -9,12 +9,13 @@ import type {
   DateHandling,
   PivotTableConfig,
   RangeAddress,
+  WorkbookReadOptions,
 } from './types';
 import { Worksheet } from './worksheet';
 import { SharedStrings } from './shared-strings';
 import { Styles } from './styles';
 import { PivotTable } from './pivot-table';
-import { readZip, writeZip, readZipText, writeZipText, ZipFiles } from './utils/zip';
+import { readZip, writeZip, readZipText, writeZipText, ZipStore, createZipStore } from './utils/zip';
 import { parseAddress, parseSheetAddress, parseSheetRange } from './utils/address';
 import { parseXml, findElement, getChildren, getAttr, XmlNode, stringifyXml, createElement } from './utils/xml';
 
@@ -22,12 +23,15 @@ import { parseXml, findElement, getChildren, getAttr, XmlNode, stringifyXml, cre
  * Represents an Excel workbook (.xlsx file)
  */
 export class Workbook {
-  private _files: ZipFiles = new Map();
+  private _files: ZipStore = createZipStore();
   private _sheets: Map<string, Worksheet> = new Map();
   private _sheetDefs: SheetDefinition[] = [];
   private _relationships: Relationship[] = [];
-  private _sharedStrings: SharedStrings;
-  private _styles: Styles;
+  private _sharedStrings: SharedStrings | null = null;
+  private _styles: Styles | null = null;
+  private _sharedStringsXml: string | null = null;
+  private _stylesXml: string | null = null;
+  private _lazy = true;
   private _dirty = false;
 
   // Table support
@@ -44,24 +48,24 @@ export class Workbook {
   private _locale = 'fr-FR';
 
   private constructor() {
-    this._sharedStrings = new SharedStrings();
-    this._styles = Styles.createDefault();
+    // Lazy init
   }
 
   /**
    * Load a workbook from a file path
    */
-  static async fromFile(path: string): Promise<Workbook> {
+  static async fromFile(path: string, options: WorkbookReadOptions = {}): Promise<Workbook> {
     const data = await readFile(path);
-    return Workbook.fromBuffer(new Uint8Array(data));
+    return Workbook.fromBuffer(new Uint8Array(data), options);
   }
 
   /**
    * Load a workbook from a buffer
    */
-  static async fromBuffer(data: Uint8Array): Promise<Workbook> {
+  static async fromBuffer(data: Uint8Array, options: WorkbookReadOptions = {}): Promise<Workbook> {
     const workbook = new Workbook();
-    workbook._files = await readZip(data);
+    workbook._lazy = options.lazy ?? true;
+    workbook._files = await readZip(data, { lazy: workbook._lazy });
 
     // Parse workbook.xml for sheet definitions
     const workbookXml = readZipText(workbook._files, 'xl/workbook.xml');
@@ -76,16 +80,9 @@ export class Workbook {
     }
 
     // Parse shared strings
-    const sharedStringsXml = readZipText(workbook._files, 'xl/sharedStrings.xml');
-    if (sharedStringsXml) {
-      workbook._sharedStrings = SharedStrings.parse(sharedStringsXml);
-    }
-
-    // Parse styles
-    const stylesXml = readZipText(workbook._files, 'xl/styles.xml');
-    if (stylesXml) {
-      workbook._styles = Styles.parse(stylesXml);
-    }
+    // Store shared strings/styles XML for lazy parse
+    workbook._sharedStringsXml = readZipText(workbook._files, 'xl/sharedStrings.xml') ?? null;
+    workbook._stylesXml = readZipText(workbook._files, 'xl/styles.xml') ?? null;
 
     return workbook;
   }
@@ -96,6 +93,9 @@ export class Workbook {
   static create(): Workbook {
     const workbook = new Workbook();
     workbook._dirty = true;
+    workbook._lazy = false;
+    workbook._sharedStrings = new SharedStrings();
+    workbook._styles = Styles.createDefault();
 
     return workbook;
   }
@@ -118,6 +118,13 @@ export class Workbook {
    * Get shared strings table
    */
   get sharedStrings(): SharedStrings {
+    if (!this._sharedStrings) {
+      if (this._sharedStringsXml) {
+        this._sharedStrings = SharedStrings.parse(this._sharedStringsXml);
+      } else {
+        this._sharedStrings = new SharedStrings();
+      }
+    }
     return this._sharedStrings;
   }
 
@@ -125,6 +132,13 @@ export class Workbook {
    * Get styles
    */
   get styles(): Styles {
+    if (!this._styles) {
+      if (this._stylesXml) {
+        this._styles = Styles.parse(this._stylesXml);
+      } else {
+        this._styles = Styles.createDefault();
+      }
+    }
     return this._styles;
   }
 
@@ -291,7 +305,7 @@ export class Workbook {
       const sheetPath = `xl/${rel.target}`;
       const sheetXml = readZipText(this._files, sheetPath);
       if (sheetXml) {
-        worksheet.parse(sheetXml);
+        worksheet.parse(sheetXml, { lazy: this._lazy });
       }
     }
 
@@ -730,13 +744,21 @@ export class Workbook {
     this._updateContentTypes();
 
     // Update shared strings if modified
-    if (this._sharedStrings.dirty || this._sharedStrings.count > 0) {
-      writeZipText(this._files, 'xl/sharedStrings.xml', this._sharedStrings.toXml());
+    if (this._sharedStrings) {
+      if (this._sharedStrings.dirty || this._sharedStrings.count > 0) {
+        writeZipText(this._files, 'xl/sharedStrings.xml', this._sharedStrings.toXml());
+      }
+    } else if (this._sharedStringsXml) {
+      writeZipText(this._files, 'xl/sharedStrings.xml', this._sharedStringsXml);
     }
 
     // Update styles if modified or if file doesn't exist yet
-    if (this._styles.dirty || this._dirty || !this._files.has('xl/styles.xml')) {
-      writeZipText(this._files, 'xl/styles.xml', this._styles.toXml());
+    if (this._styles) {
+      if (this._styles.dirty || this._dirty || !this._files.has('xl/styles.xml')) {
+        writeZipText(this._files, 'xl/styles.xml', this._styles.toXml());
+      }
+    } else if (this._stylesXml) {
+      writeZipText(this._files, 'xl/styles.xml', this._stylesXml);
     }
 
     // Update worksheets
@@ -841,7 +863,8 @@ export class Workbook {
     };
 
     // Add shared strings relationship if needed
-    if (this._sharedStrings.count > 0) {
+    const shouldIncludeSharedStrings = (this._sharedStrings?.count ?? 0) > 0 || this._sharedStringsXml !== null;
+    if (shouldIncludeSharedStrings) {
       const hasSharedStrings = this._relationships.some(
         (r) => r.type === 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/sharedStrings',
       );
@@ -919,6 +942,7 @@ export class Workbook {
   }
 
   private _updateContentTypes(): void {
+    const shouldIncludeSharedStrings = (this._sharedStrings?.count ?? 0) > 0 || this._sharedStringsXml !== null;
     const types: XmlNode[] = [
       createElement(
         'Default',
@@ -945,7 +969,7 @@ export class Workbook {
     ];
 
     // Add shared strings if present
-    if (this._sharedStrings.count > 0) {
+    if (shouldIncludeSharedStrings) {
       types.push(
         createElement(
           'Override',
