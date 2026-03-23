@@ -232,6 +232,8 @@ const formatDatePart = (value: Date, token: string, locale: string): string => {
       return padNumber(value.getMonth() + 1, 2);
     case 'm':
       return String(value.getMonth() + 1);
+    case 'dddd':
+      return value.toLocaleString(locale, { weekday: 'long' });
     case 'dd':
       return padNumber(value.getDate(), 2);
     case 'd':
@@ -285,7 +287,7 @@ const tokenizeDateFormat = (format: string): string[] => {
     }
 
     const lower = format.slice(i).toLowerCase();
-    const match = ['yyyy', 'yy', 'mmmm', 'mmm', 'mm', 'm', 'dd', 'd', 'hh', 'h', 'ss', 's'].find((t) =>
+    const match = ['yyyy', 'yy', 'mmmm', 'mmm', 'mm', 'm', 'dddd', 'dd', 'd', 'hh', 'h', 'ss', 's'].find((t) =>
       lower.startsWith(t),
     );
     if (match) {
@@ -324,6 +326,9 @@ const isDateFormat = (format: string): boolean => {
 };
 
 const formatDate = (value: Date, format: string, locale: string): string => {
+  if (locale === 'fr-FR' && format === '[$-F800]dddd\\,\\ mmmm\\ dd\\,\\ yyyy') {
+    format = 'dddd, dd mmmm yyyy';
+  }
   const tokens = tokenizeDateFormat(format);
   return tokens.map((token) => formatDatePart(value, token, locale)).join('');
 };

@@ -37,6 +37,26 @@ interface PivotFieldMeta {
   sourceCol: number;
 }
 
+interface PivotNumericInfo {
+  nonNullCount: number;
+  numericCount: number;
+  min: number;
+  max: number;
+  hasNumeric: boolean;
+  allIntegers: boolean;
+}
+
+interface PivotCacheData {
+  rowCount: number;
+  recordNodes: XmlNode[];
+  sharedItemIndexByField: Array<Map<string, number> | null>;
+  sharedItemsByField: Array<XmlNode[] | null>;
+  distinctItemsByField: Array<Exclude<CellValue, null>[] | null>;
+  numericInfoByField: PivotNumericInfo[];
+  isAxisFieldByIndex: boolean[];
+  isValueFieldByIndex: boolean[];
+}
+
 /**
  * Represents an Excel PivotTable with a fluent configuration API.
  */
@@ -217,8 +237,60 @@ export class PivotTable {
   }
 
   toPivotCacheDefinitionXml(): string {
-    const rowCount = Math.max(0, this._sourceRange.end.row - this._sourceRange.start.row);
-    const cacheFieldNodes = this._fields.map((field, index) => this._buildCacheFieldNode(field, index));
+    const cacheData = this._buildPivotCacheData();
+    return this._buildPivotCacheDefinitionXml(cacheData);
+  }
+
+  toPivotCacheRecordsXml(): string {
+    const cacheData = this._buildPivotCacheData();
+    return this._buildPivotCacheRecordsXml(cacheData);
+  }
+
+  toPivotCacheDefinitionRelsXml(): string {
+    const relsRoot = createElement(
+      'Relationships',
+      { xmlns: 'http://schemas.openxmlformats.org/package/2006/relationships' },
+      [
+        createElement(
+          'Relationship',
+          {
+            Id: 'rId1',
+            Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheRecords',
+            Target: `pivotCacheRecords${this._cachePartIndex}.xml`,
+          },
+          [],
+        ),
+      ],
+    );
+
+    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n${stringifyXml([relsRoot])}`;
+  }
+
+  /**
+   * @internal
+   */
+  buildPivotPartsXml(): {
+    cacheDefinitionXml: string;
+    cacheRecordsXml: string;
+    cacheRelsXml: string;
+    pivotTableXml: string;
+  } {
+    const cacheData = this._buildPivotCacheData();
+    return {
+      cacheDefinitionXml: this._buildPivotCacheDefinitionXml(cacheData),
+      cacheRecordsXml: this._buildPivotCacheRecordsXml(cacheData),
+      cacheRelsXml: this.toPivotCacheDefinitionRelsXml(),
+      pivotTableXml: this._buildPivotTableDefinitionXml(cacheData),
+    };
+  }
+
+  toPivotTableDefinitionXml(): string {
+    const cacheData = this._buildPivotCacheData();
+    return this._buildPivotTableDefinitionXml(cacheData);
+  }
+
+  private _buildPivotCacheDefinitionXml(cacheData: PivotCacheData): string {
+    const cacheFieldNodes = this._fields.map((field, index) => this._buildCacheFieldNode(field, index, cacheData));
 
     const attrs: Record<string, string> = {
       xmlns: 'http://schemas.openxmlformats.org/spreadsheetml/2006/main',
@@ -231,7 +303,7 @@ export class PivotTable {
       minRefreshableVersion: '3',
       refreshedVersion: '8',
       refreshOnLoad: this._refreshOnLoad ? '1' : '0',
-      recordCount: String(rowCount),
+      recordCount: String(cacheData.rowCount),
     };
 
     const cacheSourceNode = createElement('cacheSource', { type: 'worksheet' }, [
@@ -255,20 +327,8 @@ export class PivotTable {
     return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n${stringifyXml([root])}`;
   }
 
-  toPivotCacheRecordsXml(): string {
-    const recordNodes: XmlNode[] = [];
-    for (let row = this._sourceRange.start.row + 1; row <= this._sourceRange.end.row; row++) {
-      const valueNodes: XmlNode[] = [];
-
-      for (let fieldIndex = 0; fieldIndex < this._fields.length; fieldIndex++) {
-        const field = this._fields[fieldIndex];
-        const cellValue = this._sourceSheet.getCellIfExists(row, field.sourceCol)?.value ?? null;
-        valueNodes.push(this._toCacheRecordValueNode(cellValue, fieldIndex));
-      }
-
-      recordNodes.push(createElement('r', {}, valueNodes));
-    }
-
+  private _buildPivotCacheRecordsXml(cacheData: PivotCacheData): string {
+    const recordNodes = cacheData.recordNodes;
     const root = createElement(
       'pivotCacheRecords',
       {
@@ -284,27 +344,7 @@ export class PivotTable {
     return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n${stringifyXml([root])}`;
   }
 
-  toPivotCacheDefinitionRelsXml(): string {
-    const relsRoot = createElement(
-      'Relationships',
-      { xmlns: 'http://schemas.openxmlformats.org/package/2006/relationships' },
-      [
-        createElement(
-          'Relationship',
-          {
-            Id: 'rId1',
-            Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotCacheRecords',
-            Target: `pivotCacheRecords${this._cachePartIndex}.xml`,
-          },
-          [],
-        ),
-      ],
-    );
-
-    return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n${stringifyXml([relsRoot])}`;
-  }
-
-  toPivotTableDefinitionXml(): string {
+  private _buildPivotTableDefinitionXml(cacheData: PivotCacheData): string {
     const effectiveValueFields = this._valueFields.length > 0 ? [this._valueFields[0]] : [];
     const sourceFieldCount = this._fields.length;
     const pivotFields: XmlNode[] = [];
@@ -336,7 +376,7 @@ export class PivotTable {
 
       const children: XmlNode[] = [];
       if (rowFieldIndexes.includes(index) || colFieldIndexes.includes(index)) {
-        const distinctItems = this._collectDistinctItems(index);
+        const distinctItems = cacheData.distinctItemsByField[index] ?? [];
         const itemNodes: XmlNode[] = distinctItems.map((_item, itemIndex) =>
           createElement('item', { x: String(itemIndex) }, []),
         );
@@ -349,7 +389,7 @@ export class PivotTable {
 
     const children: XmlNode[] = [];
 
-    const locationRef = this._buildTargetAreaRef();
+    const locationRef = this._buildTargetAreaRef(cacheData);
     children.push(
       createElement(
         'location',
@@ -374,7 +414,7 @@ export class PivotTable {
         ),
       );
 
-      const distinctRowItems = this._collectDistinctItems(rowFieldIndexes[0]);
+      const distinctRowItems = cacheData.distinctItemsByField[rowFieldIndexes[0]] ?? [];
       const rowItemNodes: XmlNode[] = [];
       if (distinctRowItems.length > 0) {
         rowItemNodes.push(createElement('i', {}, [createElement('x', {}, [])]));
@@ -479,20 +519,16 @@ export class PivotTable {
     return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n${stringifyXml([root])}`;
   }
 
-  private _buildCacheFieldNode(field: PivotFieldMeta, fieldIndex: number): XmlNode {
-    const values = this._collectFieldValues(fieldIndex);
-    const nonNullValues = values.filter((value): value is Exclude<CellValue, null> => value !== null);
-    const isAxisField = this._isAxisField(field.name);
-    const isValueField = this._isValueField(field.name);
-    const numericValues = nonNullValues.filter(
-      (value): value is number => typeof value === 'number' && Number.isFinite(value),
-    );
-    const allNonNullAreNumbers = nonNullValues.length > 0 && numericValues.length === nonNullValues.length;
+  private _buildCacheFieldNode(field: PivotFieldMeta, fieldIndex: number, cacheData: PivotCacheData): XmlNode {
+    const info = cacheData.numericInfoByField[fieldIndex];
+    const isAxisField = cacheData.isAxisFieldByIndex[fieldIndex];
+    const isValueField = cacheData.isValueFieldByIndex[fieldIndex];
+    const allNonNullAreNumbers = info.nonNullCount > 0 && info.numericCount === info.nonNullCount;
 
     if (isValueField || (!isAxisField && allNonNullAreNumbers)) {
-      const minValue = numericValues.length > 0 ? Math.min(...numericValues) : 0;
-      const maxValue = numericValues.length > 0 ? Math.max(...numericValues) : 0;
-      const hasInteger = numericValues.every((value) => Number.isInteger(value));
+      const minValue = info.hasNumeric ? info.min : 0;
+      const maxValue = info.hasNumeric ? info.max : 0;
+      const hasInteger = info.hasNumeric ? info.allIntegers : true;
 
       const attrs: Record<string, string> = {
         containsSemiMixedTypes: '0',
@@ -514,48 +550,15 @@ export class PivotTable {
       return createElement('cacheField', { name: field.name, numFmtId: '0' }, [createElement('sharedItems', {}, [])]);
     }
 
-    const distinct = new Set<string>();
-    const sharedItems: XmlNode[] = [];
-
-    for (const value of values) {
-      if (value === null) {
-        continue;
-      }
-
-      const key = this._distinctKey(value);
-      if (distinct.has(key)) {
-        continue;
-      }
-      distinct.add(key);
-
-      if (typeof value === 'string') {
-        sharedItems.push({ s: [], ':@': { '@_v': value } } as XmlNode);
-        continue;
-      }
-
-      if (typeof value === 'number') {
-        sharedItems.push(createElement('n', { v: String(value) }, []));
-        continue;
-      }
-
-      if (typeof value === 'boolean') {
-        sharedItems.push(createElement('b', { v: value ? '1' : '0' }, []));
-        continue;
-      }
-
-      if (value instanceof Date) {
-        sharedItems.push(createElement('d', { v: value.toISOString() }, []));
-      }
-    }
-
+    const sharedItems = cacheData.sharedItemsByField[fieldIndex] ?? [];
     return createElement('cacheField', { name: field.name, numFmtId: '0' }, [
       createElement('sharedItems', { count: String(sharedItems.length) }, sharedItems),
     ]);
   }
 
-  private _buildTargetAreaRef(): string {
+  private _buildTargetAreaRef(cacheData: PivotCacheData): string {
     const start = this._targetCell;
-    const estimatedRows = Math.max(3, this._estimateOutputRows());
+    const estimatedRows = Math.max(3, this._estimateOutputRows(cacheData));
     const estimatedCols = Math.max(1, this._rowFields.length + Math.max(1, this._valueFields.length));
 
     const endRow = start.row + estimatedRows - 1;
@@ -564,58 +567,143 @@ export class PivotTable {
     return `${toAddress(start.row, start.col)}:${toAddress(endRow, endCol)}`;
   }
 
-  private _estimateOutputRows(): number {
+  private _estimateOutputRows(cacheData: PivotCacheData): number {
     if (this._rowFields.length === 0) {
       return 3;
     }
 
     const rowFieldIndex = this._fieldIndex(this._rowFields[0]);
-    const values = this._collectFieldValues(rowFieldIndex)
-      .filter((value): value is Exclude<CellValue, null> => value !== null)
-      .map((value) => this._distinctKey(value));
-
-    const distinct = new Set(values);
-    return Math.max(3, distinct.size + 2);
+    const distinctItems = cacheData.distinctItemsByField[rowFieldIndex] ?? [];
+    return Math.max(3, distinctItems.length + 2);
   }
 
-  private _collectFieldValues(fieldIndex: number): CellValue[] {
-    const meta = this._fields[fieldIndex];
-    const values: CellValue[] = [];
+  private _buildPivotCacheData(): PivotCacheData {
+    const rowCount = Math.max(0, this._sourceRange.end.row - this._sourceRange.start.row);
+    const fieldCount = this._fields.length;
+    const recordNodes: XmlNode[] = new Array(rowCount);
+    const sharedItemIndexByField: Array<Map<string, number> | null> = new Array(fieldCount).fill(null);
+    const sharedItemsByField: Array<XmlNode[] | null> = new Array(fieldCount).fill(null);
+    const distinctItemsByField: Array<Exclude<CellValue, null>[] | null> = new Array(fieldCount).fill(null);
+    const numericInfoByField: PivotNumericInfo[] = new Array(fieldCount);
+    const isAxisFieldByIndex: boolean[] = new Array(fieldCount);
+    const isValueFieldByIndex: boolean[] = new Array(fieldCount);
 
-    for (let row = this._sourceRange.start.row + 1; row <= this._sourceRange.end.row; row++) {
-      const cell = this._sourceSheet.getCellIfExists(row, meta.sourceCol);
-      values.push((cell?.value ?? null) as CellValue);
+    const effectiveRowField = this._rowFields[0] ?? null;
+    const effectiveColumnField = this._columnFields[0] ?? null;
+    const filterFields = new Set(this._filterFields);
+    const valueFields = new Set(this._valueFields.map((valueField) => valueField.field));
+
+    for (let fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
+      const fieldName = this._fields[fieldIndex].name;
+      const isAxisField =
+        fieldName === effectiveRowField || fieldName === effectiveColumnField || filterFields.has(fieldName);
+      const isValueField = valueFields.has(fieldName);
+
+      isAxisFieldByIndex[fieldIndex] = isAxisField;
+      isValueFieldByIndex[fieldIndex] = isValueField;
+
+      if (isAxisField) {
+        sharedItemIndexByField[fieldIndex] = new Map<string, number>();
+        sharedItemsByField[fieldIndex] = [];
+        distinctItemsByField[fieldIndex] = [];
+      }
+
+      numericInfoByField[fieldIndex] = {
+        nonNullCount: 0,
+        numericCount: 0,
+        min: 0,
+        max: 0,
+        hasNumeric: false,
+        allIntegers: true,
+      };
     }
 
-    return values;
-  }
+    for (let rowOffset = 0; rowOffset < rowCount; rowOffset++) {
+      const row = this._sourceRange.start.row + 1 + rowOffset;
+      const valueNodes: XmlNode[] = [];
 
-  private _collectDistinctItems(fieldIndex: number): Exclude<CellValue, null>[] {
-    const distinct = new Set<string>();
-    const result: Exclude<CellValue, null>[] = [];
+      for (let fieldIndex = 0; fieldIndex < fieldCount; fieldIndex++) {
+        const field = this._fields[fieldIndex];
+        const cellValue = this._sourceSheet.getCellIfExists(row, field.sourceCol)?.value ?? null;
 
-    for (const value of this._collectFieldValues(fieldIndex)) {
-      if (value === null) continue;
-      const key = this._distinctKey(value);
-      if (distinct.has(key)) continue;
-      distinct.add(key);
-      result.push(value);
+        if (cellValue !== null) {
+          const numericInfo = numericInfoByField[fieldIndex];
+          numericInfo.nonNullCount++;
+
+          if (typeof cellValue === 'number' && Number.isFinite(cellValue)) {
+            numericInfo.numericCount++;
+            if (!numericInfo.hasNumeric) {
+              numericInfo.min = cellValue;
+              numericInfo.max = cellValue;
+              numericInfo.hasNumeric = true;
+            } else {
+              if (cellValue < numericInfo.min) numericInfo.min = cellValue;
+              if (cellValue > numericInfo.max) numericInfo.max = cellValue;
+            }
+            if (!Number.isInteger(cellValue)) {
+              numericInfo.allIntegers = false;
+            }
+          }
+
+          if (isAxisFieldByIndex[fieldIndex]) {
+            const distinctMap = sharedItemIndexByField[fieldIndex]!;
+            const key = this._distinctKey(cellValue as Exclude<CellValue, null>);
+            let index = distinctMap.get(key);
+            if (index === undefined) {
+              index = distinctMap.size;
+              distinctMap.set(key, index);
+              distinctItemsByField[fieldIndex]!.push(cellValue as Exclude<CellValue, null>);
+              const sharedNode = this._buildSharedItemNode(cellValue as Exclude<CellValue, null>);
+              if (sharedNode) {
+                sharedItemsByField[fieldIndex]!.push(sharedNode);
+              }
+            }
+            valueNodes.push(createElement('x', { v: String(index) }, []));
+            continue;
+          }
+        }
+
+        valueNodes.push(this._buildRawCacheValueNode(cellValue));
+      }
+
+      recordNodes[rowOffset] = createElement('r', {}, valueNodes);
     }
 
-    return result;
+    return {
+      rowCount,
+      recordNodes,
+      sharedItemIndexByField,
+      sharedItemsByField,
+      distinctItemsByField,
+      numericInfoByField,
+      isAxisFieldByIndex,
+      isValueFieldByIndex,
+    };
   }
 
-  private _toCacheRecordValueNode(value: CellValue, fieldIndex: number): XmlNode {
+  private _buildSharedItemNode(value: Exclude<CellValue, null>): XmlNode | null {
+    if (typeof value === 'string') {
+      return { s: [], ':@': { '@_v': value } } as XmlNode;
+    }
+
+    if (typeof value === 'number') {
+      return createElement('n', { v: String(value) }, []);
+    }
+
+    if (typeof value === 'boolean') {
+      return createElement('b', { v: value ? '1' : '0' }, []);
+    }
+
+    if (value instanceof Date) {
+      return createElement('d', { v: value.toISOString() }, []);
+    }
+
+    return null;
+  }
+
+  private _buildRawCacheValueNode(value: CellValue): XmlNode {
     if (value === null) {
       return createElement('m', {}, []);
-    }
-
-    const field = this._fields[fieldIndex];
-    if (this._isAxisField(field.name)) {
-      const index = this._sharedItemIndex(fieldIndex, value);
-      if (index >= 0) {
-        return createElement('x', { v: String(index) }, []);
-      }
     }
 
     if (typeof value === 'string') {
@@ -641,34 +729,6 @@ export class PivotTable {
     if (!this._fields.some((field) => field.name === fieldName)) {
       throw new Error(`Pivot field not found: ${fieldName}`);
     }
-  }
-
-  private _isValueField(fieldName: string): boolean {
-    return this._valueFields.some((valueField) => valueField.field === fieldName);
-  }
-
-  private _isAxisField(fieldName: string): boolean {
-    const effectiveRowField = this._rowFields[0] ?? null;
-    const effectiveColumnField = this._columnFields[0] ?? null;
-    return (
-      fieldName === effectiveRowField || fieldName === effectiveColumnField || this._filterFields.includes(fieldName)
-    );
-  }
-
-  private _sharedItemIndex(fieldIndex: number, value: Exclude<CellValue, null>): number {
-    const distinct = new Map<string, number>();
-    for (const item of this._collectFieldValues(fieldIndex)) {
-      if (item === null) {
-        continue;
-      }
-      const key = this._distinctKey(item);
-      if (!distinct.has(key)) {
-        distinct.set(key, distinct.size);
-      }
-    }
-
-    const targetKey = this._distinctKey(value);
-    return distinct.get(targetKey) ?? -1;
   }
 
   private _fieldIndex(fieldName: string): number {

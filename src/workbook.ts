@@ -1271,17 +1271,19 @@ export class Workbook {
     }
 
     for (const pivot of this._pivotTables) {
+      const pivotParts = pivot.buildPivotPartsXml();
+
       const pivotCachePath = `xl/pivotCache/pivotCacheDefinition${pivot.cachePartIndex}.xml`;
-      writeZipText(this._files, pivotCachePath, pivot.toPivotCacheDefinitionXml());
+      writeZipText(this._files, pivotCachePath, pivotParts.cacheDefinitionXml);
 
       const pivotCacheRecordsPath = `xl/pivotCache/pivotCacheRecords${pivot.cachePartIndex}.xml`;
-      writeZipText(this._files, pivotCacheRecordsPath, pivot.toPivotCacheRecordsXml());
+      writeZipText(this._files, pivotCacheRecordsPath, pivotParts.cacheRecordsXml);
 
       const pivotCacheRelsPath = `xl/pivotCache/_rels/pivotCacheDefinition${pivot.cachePartIndex}.xml.rels`;
-      writeZipText(this._files, pivotCacheRelsPath, pivot.toPivotCacheDefinitionRelsXml());
+      writeZipText(this._files, pivotCacheRelsPath, pivotParts.cacheRelsXml);
 
       const pivotTablePath = `xl/pivotTables/pivotTable${pivot.pivotId}.xml`;
-      writeZipText(this._files, pivotTablePath, pivot.toPivotTableDefinitionXml());
+      writeZipText(this._files, pivotTablePath, pivotParts.pivotTableXml);
     }
 
     const pivotsBySheet = new Map<string, PivotTable[]>();
