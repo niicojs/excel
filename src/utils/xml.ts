@@ -1,7 +1,7 @@
-import { XMLParser, XMLBuilder } from 'fast-xml-parser';
+import { XMLParser, XMLBuilder, X2jOptions, XmlBuilderOptions } from 'fast-xml-parser';
 
 // Parser options that preserve structure and attributes
-const parserOptions = {
+const parserOptions: X2jOptions = {
   ignoreAttributes: false,
   attributeNamePrefix: '@_',
   textNodeName: '#text',
@@ -11,10 +11,13 @@ const parserOptions = {
   trimValues: false,
   parseTagValue: false,
   parseAttributeValue: false,
+  processEntities: {
+    maxTotalExpansions: 10_000,
+  },
 };
 
 // Builder options matching parser for round-trip compatibility
-const builderOptions = {
+const builderOptions: XmlBuilderOptions = {
   ignoreAttributes: false,
   attributeNamePrefix: '@_',
   textNodeName: '#text',
