@@ -102,7 +102,8 @@ export class PivotTable {
     numberFormat?: string,
   ): this {
     const fieldName = typeof fieldNameOrConfig === 'string' ? fieldNameOrConfig : fieldNameOrConfig.field;
-    const resolvedAggregation = typeof fieldNameOrConfig === 'string' ? aggregation : (fieldNameOrConfig.aggregation ?? 'sum');
+    const resolvedAggregation =
+      typeof fieldNameOrConfig === 'string' ? aggregation : (fieldNameOrConfig.aggregation ?? 'sum');
     const resolvedName = typeof fieldNameOrConfig === 'string' ? displayName : fieldNameOrConfig.name;
     const resolvedFormat = typeof fieldNameOrConfig === 'string' ? numberFormat : fieldNameOrConfig.numberFormat;
 
@@ -182,7 +183,9 @@ export class PivotTable {
         createElement(
           'pageFields',
           { count: String(this._filterFields.length) },
-          this._filterFields.map((field) => createElement('pageField', { fld: String(field.fieldIndex), hier: '-1' }, [])),
+          this._filterFields.map((field) =>
+            createElement('pageField', { fld: String(field.fieldIndex), hier: '-1' }, []),
+          ),
         ),
       );
     }
@@ -305,7 +308,9 @@ export class PivotTable {
 
     const cacheField = this._cache.fields[fieldIndex];
     if (assignment && assignment.axis !== 'value' && cacheField?.sharedItems.length) {
-      children.push(createElement('items', { count: String(cacheField.sharedItems.length + 1) }, this._buildItemNodes(fieldIndex)));
+      children.push(
+        createElement('items', { count: String(cacheField.sharedItems.length + 1) }, this._buildItemNodes(fieldIndex)),
+      );
     }
 
     return createElement('pivotField', attrs, children);
@@ -333,7 +338,11 @@ export class PivotTable {
     );
   }
 
-  private _buildAxisItemsNode(tagName: 'rowItems' | 'colItems', fields: FieldAssignment[], includeValues = false): XmlNode {
+  private _buildAxisItemsNode(
+    tagName: 'rowItems' | 'colItems',
+    fields: FieldAssignment[],
+    includeValues = false,
+  ): XmlNode {
     const itemCount = Math.max(this._getLargestSharedItemCount(fields), 1);
     const items: XmlNode[] = [];
 
@@ -341,7 +350,12 @@ export class PivotTable {
       const xNodes = fields.map(() => createElement('x', i === 0 ? {} : { v: String(i) }, []));
       if (includeValues) {
         for (let valueIndex = 0; valueIndex < this._valueFields.length; valueIndex++) {
-          items.push(createElement('i', {}, [...xNodes, createElement('x', valueIndex === 0 ? {} : { v: String(valueIndex) }, [])]));
+          items.push(
+            createElement('i', {}, [
+              ...xNodes,
+              createElement('x', valueIndex === 0 ? {} : { v: String(valueIndex) }, []),
+            ]),
+          );
         }
       } else {
         items.push(createElement('i', {}, xNodes));
@@ -392,7 +406,10 @@ export class PivotTable {
   }
 
   private _getLargestSharedItemCount(fields: FieldAssignment[]): number {
-    return fields.reduce((largest, field) => Math.max(largest, this._cache.fields[field.fieldIndex]?.sharedItems.length ?? 0), 0);
+    return fields.reduce(
+      (largest, field) => Math.max(largest, this._cache.fields[field.fieldIndex]?.sharedItems.length ?? 0),
+      0,
+    );
   }
 
   private _calculateLocationRef(): string {
@@ -412,8 +429,10 @@ export class PivotTable {
 
   private _estimateColCount(): number {
     const rowColumns = Math.max(this._rowFields.length, 1);
-    const columnItems = this._columnFields.length > 0 ? Math.max(this._getLargestSharedItemCount(this._columnFields), 1) + 1 : 1;
-    const valueMultiplier = this._columnFields.length > 0 ? Math.max(this._valueFields.length, 1) : Math.max(this._valueFields.length, 1);
+    const columnItems =
+      this._columnFields.length > 0 ? Math.max(this._getLargestSharedItemCount(this._columnFields), 1) + 1 : 1;
+    const valueMultiplier =
+      this._columnFields.length > 0 ? Math.max(this._valueFields.length, 1) : Math.max(this._valueFields.length, 1);
     return Math.max(rowColumns + columnItems * valueMultiplier, 2);
   }
 
