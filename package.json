@@ -36,8 +36,8 @@
   "scripts": {
     "dev": "tsdx dev",
     "build": "tsdx build",
-    "test": "tsdx test",
-    "test:watch": "tsdx test --watch",
+    "test": "vp test",
+    "test:watch": "vp test --watch",
     "lint": "tsdx lint",
     "format": "tsdx format",
     "format:check": "tsdx format --check",
@@ -54,7 +54,7 @@
     "tsdx": "latest",
     "typescript": "^6.0.3",
     "vite-plus": "latest",
-    "vitest": "npm:@voidzero-dev/vite-plus-test@latest"
+    "vitest": "latest"
   },
   "overrides": {
     "vite": "npm:@voidzero-dev/vite-plus-core@latest",
