@@ -1,4 +1,5 @@
-import { describe, it, expect, beforeEach } from 'vitest';
+import { describe, it, expect, beforeEach } from 'vite-plus/test';
+
 import { Workbook, Worksheet, Table } from '../src';
 
 describe('Table', () => {

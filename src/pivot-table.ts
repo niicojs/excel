@@ -1,6 +1,6 @@
-import type { AggregationType, PivotFieldAxis, PivotFieldFilter, PivotSortOrder, PivotValueConfig } from './types';
-import type { Styles } from './styles';
 import { PivotCache } from './pivot-cache';
+import type { Styles } from './styles';
+import type { AggregationType, PivotFieldAxis, PivotFieldFilter, PivotSortOrder, PivotValueConfig } from './types';
 import { createElement, stringifyXml, XmlNode } from './utils/xml';
 
 /**

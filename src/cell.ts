@@ -1,7 +1,7 @@
 import type { CellValue, CellType, CellStyle, CellData, ErrorType } from './types';
-import type { Worksheet } from './worksheet';
 import { parseAddress, toAddress } from './utils/address';
 import { formatCellValue } from './utils/format';
+import type { Worksheet } from './worksheet';
 
 // Excel epoch: December 31, 1899 (accounting for the 1900 leap year bug)
 const EXCEL_EPOCH = new Date(Date.UTC(1899, 11, 31));

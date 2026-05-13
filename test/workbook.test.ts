@@ -1,8 +1,10 @@
-import { describe, it, expect, beforeAll } from 'vitest';
+import { existsSync } from 'fs';
+import { unlink, mkdir } from 'fs/promises';
+
+import { describe, it, expect, beforeAll } from 'vite-plus/test';
+
 import { Workbook } from '../src';
 import type { ColumnConfig } from '../src';
-import { unlink, mkdir } from 'fs/promises';
-import { existsSync } from 'fs';
 
 describe('Workbook', () => {
   const testDir = 'test/fixtures';

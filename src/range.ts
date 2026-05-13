@@ -1,6 +1,6 @@
 import type { CellValue, CellStyle, RangeAddress } from './types';
-import type { Worksheet } from './worksheet';
 import { toAddress, normalizeRange } from './utils/address';
+import type { Worksheet } from './worksheet';
 
 /**
  * Represents a range of cells in a worksheet

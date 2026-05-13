@@ -1,5 +1,5 @@
-import type { PivotCacheField, CellValue } from './types';
 import type { Styles } from './styles';
+import type { PivotCacheField, CellValue } from './types';
 import { createElement, stringifyXml, XmlNode } from './utils/xml';
 
 /**

@@ -1,8 +1,7 @@
-import type { CellData, RangeAddress, SheetToJsonConfig, CellValue, DateHandling, TableConfig } from './types';
-import type { Workbook } from './workbook';
 import { Cell, parseCellRef } from './cell';
 import { Range } from './range';
 import { Table } from './table';
+import type { CellData, RangeAddress, SheetToJsonConfig, CellValue, DateHandling, TableConfig } from './types';
 import { parseRange, toAddress, parseAddress, letterToCol } from './utils/address';
 import {
   parseXml,
@@ -14,6 +13,7 @@ import {
   createElement,
   createText,
 } from './utils/xml';
+import type { Workbook } from './workbook';
 
 /**
  * Represents a worksheet in a workbook

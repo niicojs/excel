@@ -1,7 +1,7 @@
 import type { TableConfig, TableStyleConfig, TableTotalFunction, RangeAddress } from './types';
-import type { Worksheet } from './worksheet';
 import { parseRange, toAddress, toRange } from './utils/address';
 import { createElement, stringifyXml, XmlNode } from './utils/xml';
+import type { Worksheet } from './worksheet';
 
 /**
  * Maps table total function names to SUBTOTAL function numbers
