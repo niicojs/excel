@@ -1242,20 +1242,29 @@ export class Workbook {
         return id;
       };
 
+      const pivotTableRelIds: string[] = [];
       for (const pt of pivotTables) {
         const target = `../pivotTables/pivotTable${pt.index}.xml`;
-        const existing = relNodes.some(
+        const existing = relNodes.find(
           (node) =>
             getAttr(node, 'Type') ===
               'http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotTable' &&
             getAttr(node, 'Target') === target,
         );
-        if (existing) continue;
+        if (existing) {
+          const existingId = getAttr(existing, 'Id');
+          if (existingId) {
+            pivotTableRelIds.push(existingId);
+          }
+          continue;
+        }
+        const relId = allocateRelId();
+        pivotTableRelIds.push(relId);
         relNodes.push(
           createElement(
             'Relationship',
             {
-              Id: allocateRelId(),
+              Id: relId,
               Type: 'http://schemas.openxmlformats.org/officeDocument/2006/relationships/pivotTable',
               Target: target,
             },
@@ -1274,6 +1283,13 @@ export class Workbook {
         sheetRelsPath,
         `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>\n${stringifyXml([sheetRels])}`,
       );
+
+      const worksheet = this._sheets.get(sheetName);
+      if (worksheet) {
+        worksheet.setPivotTableRelIds(pivotTableRelIds);
+        const sheetPath = `xl/${rel.target}`;
+        writeZipText(this._files, sheetPath, worksheet.toXml());
+      }
     }
   }
 

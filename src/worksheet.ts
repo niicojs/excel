@@ -34,9 +34,11 @@ export class Worksheet {
   private _tables: Table[] = [];
   private _preserveXml = false;
   private _tableRelIds: string[] | null = null;
+  private _pivotTableRelIds: string[] | null = null;
   private _sheetViewsDirty = false;
   private _colsDirty = false;
   private _tablePartsDirty = false;
+  private _pivotTableDefinitionsDirty = false;
 
   constructor(workbook: Workbook, name: string) {
     this._workbook = workbook;
@@ -452,6 +454,16 @@ export class Worksheet {
   }
 
   /**
+   * Set pivot table relationship IDs for worksheet pivot table definitions.
+   * @internal
+   */
+  setPivotTableRelIds(ids: string[] | null): void {
+    this._pivotTableRelIds = ids ? [...ids] : null;
+    this._pivotTableDefinitionsDirty = true;
+    this._dirty = true;
+  }
+
+  /**
    * Create an Excel Table (ListObject) from a data range.
    *
    * Tables provide structured data features like auto-filter, banded styling,
@@ -745,6 +757,10 @@ export class Worksheet {
       worksheetChildren.push(tablePartsNode);
     }
 
+    for (const pivotTableDefinitionNode of this._buildPivotTableDefinitionNodes()) {
+      worksheetChildren.push(pivotTableDefinitionNode);
+    }
+
     const worksheetNode = createElement(
       'worksheet',
       {
@@ -873,6 +889,11 @@ export class Worksheet {
     return createElement('tableParts', { count: String(this._tables.length) }, tablePartNodes);
   }
 
+  private _buildPivotTableDefinitionNodes(): XmlNode[] {
+    if (!this._pivotTableRelIds) return [];
+    return this._pivotTableRelIds.map((relId) => createElement('pivotTableDefinition', { 'r:id': relId }, []));
+  }
+
   private _buildPreservedWorksheet(): XmlNode | null {
     if (!this._xmlNodes) return null;
     const worksheet = findElement(this._xmlNodes, 'worksheet');
@@ -912,6 +933,15 @@ export class Worksheet {
     if (this._tablePartsDirty) {
       const tablePartsNode = this._buildTablePartsNode();
       upsertChild('tableParts', tablePartsNode);
+    }
+
+    if (this._pivotTableDefinitionsDirty) {
+      for (let i = children.length - 1; i >= 0; i--) {
+        if ('pivotTableDefinition' in children[i]) {
+          children.splice(i, 1);
+        }
+      }
+      children.push(...this._buildPivotTableDefinitionNodes());
     }
 
     return worksheet;
